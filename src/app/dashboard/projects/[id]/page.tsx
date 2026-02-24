@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import Characters from "./components/Characters";
 import Places from "./components/Places";
 import WorldRules from "./components/WorldRules";
+import Editor from "./components/Editor";
 
 interface Project {
   id: string;
@@ -43,7 +44,7 @@ export default function ProjectPage() {
     );
   }
 
-  const tabs = ["personajes", "lugares", "reglas del mundo"];
+  const tabs = ["personajes", "lugares", "reglas del mundo", "editor"];
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -87,6 +88,7 @@ export default function ProjectPage() {
         {activeTab === "personajes" && <Characters projectId={params.id as string} />}
         {activeTab === "lugares" && <Places projectId={params.id as string} />}
         {activeTab === "reglas del mundo" && <WorldRules projectId={params.id as string} />}
+        {activeTab === "editor" && <Editor projectId={params.id as string} />}
       </main>
     </div>
   );

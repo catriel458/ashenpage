@@ -76,3 +76,21 @@ export const worldRules = pgTable("world_rules", {
   description: text("description"),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
 });
+
+export const chapters = pgTable("chapters", {
+  id: text("id").primaryKey(),
+  projectId: text("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const scenes = pgTable("scenes", {
+  id: text("id").primaryKey(),
+  chapterId: text("chapterId").notNull().references(() => chapters.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").default(""),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
