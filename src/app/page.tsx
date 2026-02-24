@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 
 export default function LandingPage() {
@@ -21,16 +20,17 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="relative min-h-screen flex items-center">
 
-        {/* Imagen de fondo */}
+        {/* Video de fondo */}
         <div className="absolute inset-0 z-0">
-          <Image
-            src="/cover.jpg"
-            alt="Ashenpage cover"
-            fill
-            className="object-cover opacity-40"
-            priority
-          />
-          {/* Gradientes para difuminar la imagen */}
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="w-full h-full object-cover opacity-40"
+          >
+            <source src="/cover.mp4" type="video/mp4" />
+          </video>
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80" />
         </div>
@@ -38,22 +38,18 @@ export default function LandingPage() {
         {/* Contenido */}
         <div className="relative z-10 max-w-5xl mx-auto px-8 py-32">
           <div className="max-w-xl">
-
             <p className="text-xs tracking-[0.4em] uppercase text-zinc-500 mb-6">
               Para escritores de lo oscuro
             </p>
-
             <h1 className="text-6xl font-bold leading-none tracking-tight mb-6">
               <span className="block text-white">Tu historia</span>
               <span className="block text-zinc-500">vive aquí.</span>
             </h1>
-
             <p className="text-zinc-400 text-lg leading-relaxed mb-10 max-w-md">
-              Una plataforma para escritores de horror y ciencia ficción. 
-              Construí tu universo, definí tus personajes, y escribí con una IA 
+              Una plataforma para escritores de horror y ciencia ficción.
+              Construí tu universo, definí tus personajes, y escribí con una IA
               que conoce tu historia tan bien como vos.
             </p>
-
             <div className="flex items-center gap-4">
               <Link
                 href="/login"
@@ -70,11 +66,9 @@ export default function LandingPage() {
       {/* Features */}
       <section className="relative z-10 bg-black border-t border-zinc-900 px-8 py-24">
         <div className="max-w-5xl mx-auto">
-
           <p className="text-xs tracking-[0.4em] uppercase text-zinc-600 mb-16 text-center">
             Todo lo que necesitás para escribir
           </p>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-zinc-900">
             {[
               {
