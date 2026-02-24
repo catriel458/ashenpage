@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import Characters from "./components/Characters";
+import Places from "./components/Places";
 
 interface Project {
   id: string;
@@ -89,9 +90,7 @@ export default function ProjectPage() {
           <Characters projectId={params.id as string} />
         )}
         {activeTab === "lugares" && (
-          <div>
-            <p className="text-zinc-500 text-sm">Sección de lugares — próximamente</p>
-          </div>
+          <Places projectId={params.id as string} />
         )}
         {activeTab === "reglas del mundo" && (
           <div>
