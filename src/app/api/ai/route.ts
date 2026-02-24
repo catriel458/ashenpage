@@ -82,7 +82,7 @@ ${context}`;
 
     return NextResponse.json({ text });
   } catch (error) {
-    console.error("Gemini error:", error);
-    return NextResponse.json({ error: "Error al generar respuesta" }, { status: 500 });
+    console.error("Gemini error:", JSON.stringify(error, null, 2));
+    return NextResponse.json({ error: "Error al generar respuesta", details: String(error) }, { status: 500 });
   }
 }
