@@ -46,3 +46,9 @@ body {
 .ProseMirror:focus {
   outline: none;
 }
+
+.ai-suggestion {
+  color: #f87171;
+  background-color: rgba(239, 68, 68, 0.08);
+  border-radius: 2px;
+}

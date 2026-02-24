@@ -1,10 +1,30 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Typography from "@tiptap/extension-typography";
+import TextStyle from "@tiptap/extension-text-style";
+import { Mark, mergeAttributes } from "@tiptap/core";
+
+// Marca personalizada para sugerencias de IA
+const AISuggestion = Mark.create({
+  name: "aiSuggestion",
+  addAttributes() {
+    return {
+      class: {
+        default: "ai-suggestion",
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-ai-suggestion]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", mergeAttributes(HTMLAttributes, { "data-ai-suggestion": "true", class: "ai-suggestion" }), 0];
+  },
+});
 
 interface Chapter {
   id: string;
@@ -48,9 +68,7 @@ function ToolbarButton({
     <button
       onClick={onClick}
       className={`px-2 py-1 rounded text-xs transition-colors ${
-        active
-          ? "bg-zinc-600 text-white"
-          : "text-zinc-500 hover:text-white hover:bg-zinc-800"
+        active ? "bg-zinc-600 text-white" : "text-zinc-500 hover:text-white hover:bg-zinc-800"
       }`}
     >
       {children}
@@ -72,16 +90,14 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [fontSize, setFontSize] = useState("18");
   const [focusMode, setFocusMode] = useState(false);
   const [saveTimer, setSaveTimer] = useState<NodeJS.Timeout | null>(null);
-
-  // AI panel
   const [aiOpen, setAiOpen] = useState(false);
   const [aiAction, setAiAction] = useState("continue");
   const [aiTone, setAiTone] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState("");
+  const [hasPendingSuggestion, setHasPendingSuggestion] = useState(false);
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, Typography],
+    extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
     content: "",
     editorProps: {
       attributes: {
@@ -92,25 +108,19 @@ export default function Editor({ projectId }: { projectId: string }) {
       setSaved(false);
       if (saveTimer) clearTimeout(saveTimer);
       const timer = setTimeout(() => {
-        if (selectedScene) {
-          saveContent(selectedScene, editor.getHTML());
-        }
+        if (selectedScene) saveContent(selectedScene, editor.getHTML());
       }, 1500);
       setSaveTimer(timer);
     },
   });
 
-  useEffect(() => {
-    fetchChapters();
-  }, [projectId]);
+  useEffect(() => { fetchChapters(); }, [projectId]);
 
   async function fetchChapters() {
     const res = await fetch(`/api/chapters?projectId=${projectId}`);
     const data = await res.json();
     setChapters(data);
-    for (const chapter of data) {
-      await fetchScenes(chapter.id);
-    }
+    for (const chapter of data) await fetchScenes(chapter.id);
   }
 
   async function fetchScenes(chapterId: string) {
@@ -178,7 +188,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     setSelectedScene(scene);
     editor?.commands.setContent(scene.content || "");
     setSaved(true);
-    setAiResult("");
+    setHasPendingSuggestion(false);
   }
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
@@ -190,9 +200,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     });
     setScenes((prev) => ({
       ...prev,
-      [scene.chapterId]: prev[scene.chapterId].map((s) =>
-        s.id === scene.id ? { ...s, content: html } : s
-      ),
+      [scene.chapterId]: prev[scene.chapterId].map((s) => s.id === scene.id ? { ...s, content: html } : s),
     }));
     setSaving(false);
     setSaved(true);
@@ -200,31 +208,71 @@ export default function Editor({ projectId }: { projectId: string }) {
 
   async function runAI() {
     if (!selectedScene || !editor) return;
+    if (hasPendingSuggestion) {
+      alert("Primero aceptá o descartá la sugerencia actual.");
+      return;
+    }
     setAiLoading(true);
-    setAiResult("");
 
     const context = editor.getText();
-
     const res = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId,
-        action: aiAction,
-        context,
-        tone: aiTone,
-      }),
+      body: JSON.stringify({ projectId, action: aiAction, context, tone: aiTone }),
     });
 
     const data = await res.json();
-    setAiResult(data.text || data.error || "Error inesperado");
+    if (data.text) {
+      // Insertar el texto con la marca de IA al final
+      const aiText = data.text;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(editor.state.doc.content.size, {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              marks: [{ type: "aiSuggestion" }],
+              text: aiText,
+            },
+          ],
+        })
+        .run();
+      setHasPendingSuggestion(true);
+    }
     setAiLoading(false);
   }
 
-  function insertAiResult() {
-    if (!editor || !aiResult) return;
-    editor.chain().focus().insertContentAt(editor.state.doc.content.size, `\n${aiResult}`).run();
-    setAiResult("");
+  function acceptSuggestion() {
+    if (!editor) return;
+    // Remover la marca aiSuggestion de todo el documento
+    const { doc } = editor.state;
+    const tr = editor.state.tr;
+    doc.descendants((node, pos) => {
+      if (node.isText && node.marks.some((m) => m.type.name === "aiSuggestion")) {
+        tr.removeMark(pos, pos + node.nodeSize, editor.schema.marks.aiSuggestion);
+      }
+    });
+    editor.view.dispatch(tr);
+    setHasPendingSuggestion(false);
+  }
+
+  function discardSuggestion() {
+    if (!editor) return;
+    // Eliminar todos los nodos con marca aiSuggestion
+    const { doc } = editor.state;
+    const tr = editor.state.tr;
+    const toDelete: { from: number; to: number }[] = [];
+    doc.descendants((node, pos) => {
+      if (node.isText && node.marks.some((m) => m.type.name === "aiSuggestion")) {
+        toDelete.push({ from: pos, to: pos + node.nodeSize });
+      }
+    });
+    // Eliminar en orden inverso para no afectar posiciones
+    toDelete.reverse().forEach(({ from, to }) => tr.delete(from, to));
+    editor.view.dispatch(tr);
+    setHasPendingSuggestion(false);
   }
 
   const wordCount = editor?.getText().trim() === "" ? 0 : editor?.getText().trim().split(/\s+/).length ?? 0;
@@ -232,7 +280,7 @@ export default function Editor({ projectId }: { projectId: string }) {
   return (
     <div className={`flex h-[calc(100vh-120px)] ${focusMode ? "fixed inset-0 z-50 bg-zinc-950" : ""}`}>
 
-      {/* Sidebar capítulos */}
+      {/* Sidebar */}
       {!focusMode && (
         <div className="w-56 flex-shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
           <div className="p-3 border-b border-zinc-800">
@@ -245,13 +293,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                 placeholder="Nuevo capítulo..."
                 className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
               />
-              <button
-                onClick={createChapter}
-                disabled={!newChapterTitle.trim()}
-                className="bg-zinc-700 hover:bg-zinc-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:opacity-40"
-              >
-                +
-              </button>
+              <button onClick={createChapter} disabled={!newChapterTitle.trim()} className="bg-zinc-700 hover:bg-zinc-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:opacity-40">+</button>
             </div>
           </div>
 
@@ -263,58 +305,39 @@ export default function Editor({ projectId }: { projectId: string }) {
                 <div key={chapter.id} className="border-b border-zinc-900">
                   <div className="flex items-center justify-between px-3 py-2 group">
                     {editingChapter === chapter.id ? (
-                      <input
-                        autoFocus
-                        defaultValue={chapter.title}
+                      <input autoFocus defaultValue={chapter.title}
                         onBlur={(e) => renameChapter(chapter.id, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") renameChapter(chapter.id, e.currentTarget.value);
-                          if (e.key === "Escape") setEditingChapter(null);
-                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") renameChapter(chapter.id, e.currentTarget.value); if (e.key === "Escape") setEditingChapter(null); }}
                         className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                       />
                     ) : (
-                      <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">
-                        {chapter.title}
-                      </span>
+                      <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">{chapter.title}</span>
                     )}
                     <button onClick={() => deleteChapter(chapter.id)} className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
                   </div>
 
                   <div className="pb-2">
                     {(scenes[chapter.id] || []).map((scene) => (
-                      <div
-                        key={scene.id}
-                        className={`flex items-center justify-between px-4 py-1.5 group cursor-pointer ${
-                          selectedScene?.id === scene.id ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
-                        }`}
+                      <div key={scene.id}
+                        className={`flex items-center justify-between px-4 py-1.5 group cursor-pointer ${selectedScene?.id === scene.id ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"}`}
                         onClick={() => selectScene(scene)}
                       >
                         {editingScene === scene.id ? (
-                          <input
-                            autoFocus
-                            defaultValue={scene.title}
+                          <input autoFocus defaultValue={scene.title}
                             onClick={(e) => e.stopPropagation()}
                             onBlur={(e) => renameScene(scene.id, chapter.id, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") renameScene(scene.id, chapter.id, e.currentTarget.value);
-                              if (e.key === "Escape") setEditingScene(null);
-                            }}
+                            onKeyDown={(e) => { if (e.key === "Enter") renameScene(scene.id, chapter.id, e.currentTarget.value); if (e.key === "Escape") setEditingScene(null); }}
                             className="flex-1 bg-zinc-700 border border-zinc-500 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                           />
                         ) : (
-                          <span onDoubleClick={(e) => { e.stopPropagation(); setEditingScene(scene.id); }} className="text-xs truncate">
-                            {scene.title}
-                          </span>
+                          <span onDoubleClick={(e) => { e.stopPropagation(); setEditingScene(scene.id); }} className="text-xs truncate">{scene.title}</span>
                         )}
                         <button onClick={(e) => { e.stopPropagation(); deleteScene(scene.id, chapter.id); }} className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">×</button>
                       </div>
                     ))}
 
                     <div className="flex gap-1 px-3 pt-1">
-                      <input
-                        type="text"
-                        value={newSceneTitles[chapter.id] || ""}
+                      <input type="text" value={newSceneTitles[chapter.id] || ""}
                         onChange={(e) => setNewSceneTitles((prev) => ({ ...prev, [chapter.id]: e.target.value }))}
                         onKeyDown={(e) => e.key === "Enter" && createScene(chapter.id)}
                         placeholder="Nueva escena..."
@@ -330,7 +353,7 @@ export default function Editor({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {/* Editor area */}
+      {/* Editor */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {!selectedScene ? (
           <div className="flex-1 flex items-center justify-center">
@@ -361,9 +384,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                 </span>
                 <button
                   onClick={() => setAiOpen(!aiOpen)}
-                  className={`text-xs px-3 py-1 rounded border transition-colors ${
-                    aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"
-                  }`}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
                 >
                   ✦ IA
                 </button>
@@ -375,6 +396,30 @@ export default function Editor({ projectId }: { projectId: string }) {
                 </button>
               </div>
             </div>
+
+            {/* Banner sugerencia pendiente */}
+            {hasPendingSuggestion && (
+              <div className="flex items-center justify-between px-4 py-2 bg-red-950/40 border-b border-red-900/50">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-xs text-red-400">Sugerencia de IA pendiente</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={acceptSuggestion}
+                    className="text-xs bg-green-900/50 hover:bg-green-800/50 text-green-400 px-3 py-1 rounded border border-green-800/50 transition-colors"
+                  >
+                    ✓ Aceptar
+                  </button>
+                  <button
+                    onClick={discardSuggestion}
+                    className="text-xs bg-red-900/50 hover:bg-red-800/50 text-red-400 px-3 py-1 rounded border border-red-800/50 transition-colors"
+                  >
+                    ✗ Descartar
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-1 overflow-hidden">
               {/* Texto */}
@@ -389,23 +434,17 @@ export default function Editor({ projectId }: { projectId: string }) {
                 <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-zinc-800">
                     <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">✦ Asistente IA</h3>
-
                     <div className="flex flex-col gap-2 mb-3">
                       {aiActions.map((action) => (
                         <button
                           key={action.key}
                           onClick={() => setAiAction(action.key)}
-                          className={`text-left px-3 py-2 rounded text-xs transition-colors ${
-                            aiAction === action.key
-                              ? "bg-zinc-700 text-white"
-                              : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-                          }`}
+                          className={`text-left px-3 py-2 rounded text-xs transition-colors ${aiAction === action.key ? "bg-zinc-700 text-white" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"}`}
                         >
                           {action.label}
                         </button>
                       ))}
                     </div>
-
                     <input
                       type="text"
                       value={aiTone}
@@ -413,46 +452,32 @@ export default function Editor({ projectId }: { projectId: string }) {
                       placeholder="Tono (ej: oscuro, poético...)"
                       className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 mb-3"
                     />
-
                     <button
                       onClick={runAI}
-                      disabled={aiLoading}
+                      disabled={aiLoading || hasPendingSuggestion}
                       className="w-full bg-white text-zinc-900 py-2 rounded text-xs font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-50"
                     >
-                      {aiLoading ? "Generando..." : "Generar"}
+                      {aiLoading ? "Generando..." : hasPendingSuggestion ? "Resolvé la sugerencia primero" : "Generar"}
                     </button>
                   </div>
 
-                  {/* Resultado */}
-                  <div className="flex-1 overflow-y-auto p-4">
+                  <div className="flex-1 p-4">
+                    {!hasPendingSuggestion && !aiLoading && (
+                      <p className="text-zinc-700 text-xs text-center mt-4">
+                        El texto generado aparecerá en rojo directamente en el editor
+                      </p>
+                    )}
                     {aiLoading && (
                       <div className="flex items-center justify-center h-24">
-                        <p className="text-zinc-600 text-xs">Pensando...</p>
+                        <p className="text-zinc-600 text-xs">Generando...</p>
                       </div>
                     )}
-                    {aiResult && !aiLoading && (
-                      <div className="flex flex-col gap-3">
-                        <p className="text-zinc-300 text-xs leading-relaxed whitespace-pre-wrap">{aiResult}</p>
-                        {aiAction === "continue" || aiAction === "alternative" || aiAction === "tension" ? (
-                          <button
-                            onClick={insertAiResult}
-                            className="w-full border border-zinc-700 text-zinc-400 py-1.5 rounded text-xs hover:border-zinc-500 hover:text-white transition-colors"
-                          >
-                            Insertar en el texto
-                          </button>
-                        ) : null}
-                        <button
-                          onClick={() => setAiResult("")}
-                          className="w-full text-zinc-700 text-xs hover:text-zinc-500 transition-colors"
-                        >
-                          Limpiar
-                        </button>
+                    {hasPendingSuggestion && !aiLoading && (
+                      <div className="bg-red-950/20 border border-red-900/30 rounded-lg p-3 mt-2">
+                        <p className="text-red-400 text-xs leading-relaxed">
+                          El texto en rojo en el editor es la sugerencia de la IA. Podés editarlo antes de aceptarlo.
+                        </p>
                       </div>
-                    )}
-                    {!aiResult && !aiLoading && (
-                      <p className="text-zinc-700 text-xs text-center mt-8">
-                        Seleccioná una acción y hacé click en Generar
-                      </p>
                     )}
                   </div>
                 </div>
