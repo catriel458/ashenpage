@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
+import Characters from "./components/Characters";
 
 interface Project {
   id: string;
@@ -26,11 +27,11 @@ export default function ProjectPage() {
     if (status === "authenticated") fetchProject();
   }, [status]);
 
-async function fetchProject() {
-  const res = await fetch(`/api/projects/single?id=${params.id}`);
-  const data = await res.json();
-  setProject(data);
-}
+  async function fetchProject() {
+    const res = await fetch(`/api/projects/single?id=${params.id}`);
+    const data = await res.json();
+    setProject(data);
+  }
 
   if (!project) {
     return (
@@ -85,9 +86,7 @@ async function fetchProject() {
       {/* Content */}
       <main className="max-w-5xl mx-auto px-8 py-8">
         {activeTab === "personajes" && (
-          <div>
-            <p className="text-zinc-500 text-sm">Sección de personajes — próximamente</p>
-          </div>
+          <Characters projectId={params.id as string} />
         )}
         {activeTab === "lugares" && (
           <div>
