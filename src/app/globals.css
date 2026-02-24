@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.ProseMirror {
+  color: #d4d4d8;
+  line-height: 1.9;
+  min-height: calc(100vh - 250px);
+}
+
+.ProseMirror p {
+  margin-bottom: 1.2em;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #3f3f46;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ProseMirror:focus {
+  outline: none;
+}
