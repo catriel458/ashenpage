@@ -27,6 +27,14 @@ const fonts = [
   { label: "Sans", value: "system-ui, sans-serif" },
 ];
 
+const aiActions = [
+  { key: "continue", label: "Continuar escena" },
+  { key: "improve", label: "Sugerir mejoras" },
+  { key: "consistency", label: "Revisar consistencia" },
+  { key: "alternative", label: "Versión alternativa" },
+  { key: "tension", label: "Aumentar tensión" },
+];
+
 function ToolbarButton({
   onClick,
   active,
@@ -64,6 +72,13 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [fontSize, setFontSize] = useState("18");
   const [focusMode, setFocusMode] = useState(false);
   const [saveTimer, setSaveTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // AI panel
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiAction, setAiAction] = useState("continue");
+  const [aiTone, setAiTone] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState("");
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Typography],
@@ -163,6 +178,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     setSelectedScene(scene);
     editor?.commands.setContent(scene.content || "");
     setSaved(true);
+    setAiResult("");
   }
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
@@ -174,20 +190,51 @@ export default function Editor({ projectId }: { projectId: string }) {
     });
     setScenes((prev) => ({
       ...prev,
-      [scene.chapterId]: prev[scene.chapterId].map((s) => s.id === scene.id ? { ...s, content: html } : s),
+      [scene.chapterId]: prev[scene.chapterId].map((s) =>
+        s.id === scene.id ? { ...s, content: html } : s
+      ),
     }));
     setSaving(false);
     setSaved(true);
   }, []);
+
+  async function runAI() {
+    if (!selectedScene || !editor) return;
+    setAiLoading(true);
+    setAiResult("");
+
+    const context = editor.getText();
+
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId,
+        action: aiAction,
+        context,
+        tone: aiTone,
+      }),
+    });
+
+    const data = await res.json();
+    setAiResult(data.text || data.error || "Error inesperado");
+    setAiLoading(false);
+  }
+
+  function insertAiResult() {
+    if (!editor || !aiResult) return;
+    editor.chain().focus().insertContentAt(editor.state.doc.content.size, `\n${aiResult}`).run();
+    setAiResult("");
+  }
 
   const wordCount = editor?.getText().trim() === "" ? 0 : editor?.getText().trim().split(/\s+/).length ?? 0;
 
   return (
     <div className={`flex h-[calc(100vh-120px)] ${focusMode ? "fixed inset-0 z-50 bg-zinc-950" : ""}`}>
 
-      {/* Sidebar */}
+      {/* Sidebar capítulos */}
       {!focusMode && (
-        <div className="w-60 flex-shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
+        <div className="w-56 flex-shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
           <div className="p-3 border-b border-zinc-800">
             <div className="flex gap-2">
               <input
@@ -227,19 +274,11 @@ export default function Editor({ projectId }: { projectId: string }) {
                         className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                       />
                     ) : (
-                      <span
-                        onDoubleClick={() => setEditingChapter(chapter.id)}
-                        className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default"
-                      >
+                      <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">
                         {chapter.title}
                       </span>
                     )}
-                    <button
-                      onClick={() => deleteChapter(chapter.id)}
-                      className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      ×
-                    </button>
+                    <button onClick={() => deleteChapter(chapter.id)} className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
                   </div>
 
                   <div className="pb-2">
@@ -247,9 +286,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                       <div
                         key={scene.id}
                         className={`flex items-center justify-between px-4 py-1.5 group cursor-pointer ${
-                          selectedScene?.id === scene.id
-                            ? "bg-zinc-800 text-white"
-                            : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+                          selectedScene?.id === scene.id ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
                         }`}
                         onClick={() => selectScene(scene)}
                       >
@@ -266,19 +303,11 @@ export default function Editor({ projectId }: { projectId: string }) {
                             className="flex-1 bg-zinc-700 border border-zinc-500 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
                           />
                         ) : (
-                          <span
-                            onDoubleClick={(e) => { e.stopPropagation(); setEditingScene(scene.id); }}
-                            className="text-xs truncate"
-                          >
+                          <span onDoubleClick={(e) => { e.stopPropagation(); setEditingScene(scene.id); }} className="text-xs truncate">
                             {scene.title}
                           </span>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteScene(scene.id, chapter.id); }}
-                          className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                        >
-                          ×
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteScene(scene.id, chapter.id); }} className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">×</button>
                       </div>
                     ))}
 
@@ -291,13 +320,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                         placeholder="Nueva escena..."
                         className="flex-1 bg-transparent border-b border-zinc-800 focus:border-zinc-600 px-1 py-0.5 text-xs text-zinc-600 placeholder-zinc-700 focus:outline-none focus:text-zinc-400 transition-colors"
                       />
-                      <button
-                        onClick={() => createScene(chapter.id)}
-                        disabled={!newSceneTitles[chapter.id]?.trim()}
-                        className="text-zinc-700 hover:text-zinc-400 text-xs disabled:opacity-30 transition-colors"
-                      >
-                        +
-                      </button>
+                      <button onClick={() => createScene(chapter.id)} disabled={!newSceneTitles[chapter.id]?.trim()} className="text-zinc-700 hover:text-zinc-400 text-xs disabled:opacity-30 transition-colors">+</button>
                     </div>
                   </div>
                 </div>
@@ -318,47 +341,32 @@ export default function Editor({ projectId }: { projectId: string }) {
             {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 flex-wrap gap-2">
               <div className="flex items-center gap-1 flex-wrap">
-                <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")}>
-                  <strong>N</strong>
-                </ToolbarButton>
-                <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive("italic")}>
-                  <em>I</em>
-                </ToolbarButton>
-                <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive("underline")}>
-                  <span className="underline">S</span>
-                </ToolbarButton>
-                <ToolbarButton onClick={() => editor?.chain().focus().toggleStrike().run()} active={editor?.isActive("strike")}>
-                  <span className="line-through">T</span>
-                </ToolbarButton>
-
+                <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")}><strong>N</strong></ToolbarButton>
+                <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive("italic")}><em>I</em></ToolbarButton>
+                <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive("underline")}><span className="underline">S</span></ToolbarButton>
+                <ToolbarButton onClick={() => editor?.chain().focus().toggleStrike().run()} active={editor?.isActive("strike")}><span className="line-through">T</span></ToolbarButton>
                 <div className="w-px h-4 bg-zinc-800 mx-1" />
-
-                <select
-                  value={font}
-                  onChange={(e) => setFont(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-400 focus:outline-none"
-                >
-                  {fonts.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
+                <select value={font} onChange={(e) => setFont(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-400 focus:outline-none">
+                  {fonts.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
-
-                <select
-                  value={fontSize}
-                  onChange={(e) => setFontSize(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-400 focus:outline-none w-16"
-                >
-                  {["14", "16", "18", "20", "22", "24"].map((s) => (
-                    <option key={s} value={s}>{s}px</option>
-                  ))}
+                <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-0.5 text-xs text-zinc-400 focus:outline-none w-16">
+                  {["14", "16", "18", "20", "22", "24"].map((s) => <option key={s} value={s}>{s}px</option>)}
                 </select>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <span className="text-xs text-zinc-700">{wordCount} palabras</span>
                 <span className={`text-xs ${saving ? "text-zinc-500" : saved ? "text-zinc-700" : "text-zinc-500"}`}>
                   {saving ? "Guardando..." : saved ? "✓ Guardado" : "Sin guardar"}
                 </span>
+                <button
+                  onClick={() => setAiOpen(!aiOpen)}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${
+                    aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"
+                  }`}
+                >
+                  ✦ IA
+                </button>
                 <button
                   onClick={() => setFocusMode(!focusMode)}
                   className="text-xs text-zinc-600 hover:text-white transition-colors border border-zinc-800 hover:border-zinc-600 px-2 py-0.5 rounded"
@@ -368,14 +376,87 @@ export default function Editor({ projectId }: { projectId: string }) {
               </div>
             </div>
 
-            {/* Editor content */}
-            <div
-              className="flex-1 overflow-y-auto px-16 py-10"
-              style={{ fontFamily: font, fontSize: `${fontSize}px` }}
-            >
-              <div className="max-w-2xl mx-auto">
-                <EditorContent editor={editor} />
+            <div className="flex flex-1 overflow-hidden">
+              {/* Texto */}
+              <div className="flex-1 overflow-y-auto px-16 py-10" style={{ fontFamily: font, fontSize: `${fontSize}px` }}>
+                <div className="max-w-2xl mx-auto">
+                  <EditorContent editor={editor} />
+                </div>
               </div>
+
+              {/* Panel IA */}
+              {aiOpen && (
+                <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-zinc-800">
+                    <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">✦ Asistente IA</h3>
+
+                    <div className="flex flex-col gap-2 mb-3">
+                      {aiActions.map((action) => (
+                        <button
+                          key={action.key}
+                          onClick={() => setAiAction(action.key)}
+                          className={`text-left px-3 py-2 rounded text-xs transition-colors ${
+                            aiAction === action.key
+                              ? "bg-zinc-700 text-white"
+                              : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                          }`}
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <input
+                      type="text"
+                      value={aiTone}
+                      onChange={(e) => setAiTone(e.target.value)}
+                      placeholder="Tono (ej: oscuro, poético...)"
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 mb-3"
+                    />
+
+                    <button
+                      onClick={runAI}
+                      disabled={aiLoading}
+                      className="w-full bg-white text-zinc-900 py-2 rounded text-xs font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-50"
+                    >
+                      {aiLoading ? "Generando..." : "Generar"}
+                    </button>
+                  </div>
+
+                  {/* Resultado */}
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {aiLoading && (
+                      <div className="flex items-center justify-center h-24">
+                        <p className="text-zinc-600 text-xs">Pensando...</p>
+                      </div>
+                    )}
+                    {aiResult && !aiLoading && (
+                      <div className="flex flex-col gap-3">
+                        <p className="text-zinc-300 text-xs leading-relaxed whitespace-pre-wrap">{aiResult}</p>
+                        {aiAction === "continue" || aiAction === "alternative" || aiAction === "tension" ? (
+                          <button
+                            onClick={insertAiResult}
+                            className="w-full border border-zinc-700 text-zinc-400 py-1.5 rounded text-xs hover:border-zinc-500 hover:text-white transition-colors"
+                          >
+                            Insertar en el texto
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => setAiResult("")}
+                          className="w-full text-zinc-700 text-xs hover:text-zinc-500 transition-colors"
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+                    )}
+                    {!aiResult && !aiLoading && (
+                      <p className="text-zinc-700 text-xs text-center mt-8">
+                        Seleccioná una acción y hacé click en Generar
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
