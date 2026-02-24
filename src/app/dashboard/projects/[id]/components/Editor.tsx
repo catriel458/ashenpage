@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useEditor, EditorContent, Extension } from "@tiptap/react";
+import { TextStyle } from "@tiptap/extension-text-style";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Typography from "@tiptap/extension-typography";
-import TextStyle from "@tiptap/extension-text-style";
 import { Mark, mergeAttributes } from "@tiptap/core";
 
 // Marca personalizada para sugerencias de IA
