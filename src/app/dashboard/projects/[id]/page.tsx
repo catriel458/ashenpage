@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import Characters from "./components/Characters";
 import Places from "./components/Places";
+import WorldRules from "./components/WorldRules";
 
 interface Project {
   id: string;
@@ -46,7 +47,6 @@ export default function ProjectPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
-      {/* Header */}
       <header className="border-b border-zinc-800 px-8 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -65,7 +65,6 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      {/* Tabs */}
       <div className="border-b border-zinc-800 px-8">
         <div className="max-w-5xl mx-auto flex gap-6">
           {tabs.map((tab) => (
@@ -84,19 +83,10 @@ export default function ProjectPage() {
         </div>
       </div>
 
-      {/* Content */}
       <main className="max-w-5xl mx-auto px-8 py-8">
-        {activeTab === "personajes" && (
-          <Characters projectId={params.id as string} />
-        )}
-        {activeTab === "lugares" && (
-          <Places projectId={params.id as string} />
-        )}
-        {activeTab === "reglas del mundo" && (
-          <div>
-            <p className="text-zinc-500 text-sm">Reglas del mundo — próximamente</p>
-          </div>
-        )}
+        {activeTab === "personajes" && <Characters projectId={params.id as string} />}
+        {activeTab === "lugares" && <Places projectId={params.id as string} />}
+        {activeTab === "reglas del mundo" && <WorldRules projectId={params.id as string} />}
       </main>
     </div>
   );
