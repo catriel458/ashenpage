@@ -33,3 +33,46 @@ export const verificationTokens = pgTable("verificationTokens", {
   token: text("token").notNull(),
   expires: timestamp("expires", { mode: "date" }).notNull(),
 });
+
+export const projects = pgTable("projects", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  genre: text("genre").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const characters = pgTable("characters", {
+  id: text("id").primaryKey(),
+  projectId: text("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  age: text("age"),
+  personality: text("personality"),
+  backstory: text("backstory"),
+  fears: text("fears"),
+  motivations: text("motivations"),
+  voice: text("voice"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const places = pgTable("places", {
+  id: text("id").primaryKey(),
+  projectId: text("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  atmosphere: text("atmosphere"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const worldRules = pgTable("world_rules", {
+  id: text("id").primaryKey(),
+  projectId: text("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
