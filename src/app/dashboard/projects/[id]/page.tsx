@@ -26,11 +26,11 @@ export default function ProjectPage() {
     if (status === "authenticated") fetchProject();
   }, [status]);
 
-  async function fetchProject() {
-    const res = await fetch(`/api/projects/${params.id}`);
-    const data = await res.json();
-    setProject(data);
-  }
+async function fetchProject() {
+  const res = await fetch(`/api/projects/single?id=${params.id}`);
+  const data = await res.json();
+  setProject(data);
+}
 
   if (!project) {
     return (
