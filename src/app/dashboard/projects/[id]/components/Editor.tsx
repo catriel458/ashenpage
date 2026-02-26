@@ -1,22 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useEditor, EditorContent, Extension } from "@tiptap/react";
-import { TextStyle } from "@tiptap/extension-text-style";
+import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Typography from "@tiptap/extension-typography";
+import { TextStyle } from "@tiptap/extension-text-style";
 import { Mark, mergeAttributes } from "@tiptap/core";
 
-// Marca personalizada para sugerencias de IA
 const AISuggestion = Mark.create({
   name: "aiSuggestion",
   addAttributes() {
-    return {
-      class: {
-        default: "ai-suggestion",
-      },
-    };
+    return { class: { default: "ai-suggestion" } };
   },
   parseHTML() {
     return [{ tag: 'span[data-ai-suggestion]' }];
@@ -26,19 +21,8 @@ const AISuggestion = Mark.create({
   },
 });
 
-interface Chapter {
-  id: string;
-  title: string;
-  order: number;
-}
-
-interface Scene {
-  id: string;
-  chapterId: string;
-  title: string;
-  content: string;
-  order: number;
-}
+interface Chapter { id: string; title: string; order: number; }
+interface Scene { id: string; chapterId: string; title: string; content: string; order: number; }
 
 const fonts = [
   { label: "Georgia", value: "Georgia, serif" },
@@ -49,28 +33,15 @@ const fonts = [
 
 const aiActions = [
   { key: "continue", label: "Continuar escena" },
-  { key: "improve", label: "Sugerir mejoras" },
+  { key: "improve", label: "Mejorar texto" },
   { key: "consistency", label: "Revisar consistencia" },
   { key: "alternative", label: "Versión alternativa" },
   { key: "tension", label: "Aumentar tensión" },
 ];
 
-function ToolbarButton({
-  onClick,
-  active,
-  children,
-}: {
-  onClick: () => void;
-  active?: boolean;
-  children: React.ReactNode;
-}) {
+function ToolbarButton({ onClick, active, children }: { onClick: () => void; active?: boolean; children: React.ReactNode; }) {
   return (
-    <button
-      onClick={onClick}
-      className={`px-2 py-1 rounded text-xs transition-colors ${
-        active ? "bg-zinc-600 text-white" : "text-zinc-500 hover:text-white hover:bg-zinc-800"
-      }`}
-    >
+    <button onClick={onClick} className={`px-2 py-1 rounded text-xs transition-colors ${active ? "bg-zinc-600 text-white" : "text-zinc-500 hover:text-white hover:bg-zinc-800"}`}>
       {children}
     </button>
   );
@@ -95,14 +66,13 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [aiTone, setAiTone] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [hasPendingSuggestion, setHasPendingSuggestion] = useState(false);
+  const [originalContent, setOriginalContent] = useState<string>("");
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
     content: "",
     editorProps: {
-      attributes: {
-        class: "prose prose-invert max-w-none focus:outline-none min-h-screen",
-      },
+      attributes: { class: "prose prose-invert max-w-none focus:outline-none min-h-screen" },
     },
     onUpdate: ({ editor }) => {
       setSaved(false);
@@ -189,6 +159,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     editor?.commands.setContent(scene.content || "");
     setSaved(true);
     setHasPendingSuggestion(false);
+    setOriginalContent("");
   }
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
@@ -213,6 +184,7 @@ export default function Editor({ projectId }: { projectId: string }) {
       return;
     }
     setAiLoading(true);
+    setOriginalContent(editor.getHTML());
 
     const context = editor.getText();
     const res = await fetch("/api/ai", {
@@ -223,22 +195,31 @@ export default function Editor({ projectId }: { projectId: string }) {
 
     const data = await res.json();
     if (data.text) {
-      // Insertar el texto con la marca de IA al final
       const aiText = data.text;
-      editor
-        .chain()
-        .focus()
-        .insertContentAt(editor.state.doc.content.size, {
-          type: "paragraph",
-          content: [
-            {
+      const replaceActions = ["improve", "tension", "alternative"];
+
+      if (replaceActions.includes(aiAction)) {
+        editor.commands.setContent({
+          type: "doc",
+          content: [{
+            type: "paragraph",
+            content: [{
               type: "text",
               marks: [{ type: "aiSuggestion" }],
               text: aiText,
-            },
-          ],
-        })
-        .run();
+            }],
+          }],
+        });
+      } else {
+        editor.chain().focus().insertContentAt(editor.state.doc.content.size, {
+          type: "paragraph",
+          content: [{
+            type: "text",
+            marks: [{ type: "aiSuggestion" }],
+            text: aiText,
+          }],
+        }).run();
+      }
       setHasPendingSuggestion(true);
     }
     setAiLoading(false);
@@ -246,7 +227,6 @@ export default function Editor({ projectId }: { projectId: string }) {
 
   function acceptSuggestion() {
     if (!editor) return;
-    // Remover la marca aiSuggestion de todo el documento
     const { doc } = editor.state;
     const tr = editor.state.tr;
     doc.descendants((node, pos) => {
@@ -255,23 +235,27 @@ export default function Editor({ projectId }: { projectId: string }) {
       }
     });
     editor.view.dispatch(tr);
+    setOriginalContent("");
     setHasPendingSuggestion(false);
   }
 
   function discardSuggestion() {
     if (!editor) return;
-    // Eliminar todos los nodos con marca aiSuggestion
-    const { doc } = editor.state;
-    const tr = editor.state.tr;
-    const toDelete: { from: number; to: number }[] = [];
-    doc.descendants((node, pos) => {
-      if (node.isText && node.marks.some((m) => m.type.name === "aiSuggestion")) {
-        toDelete.push({ from: pos, to: pos + node.nodeSize });
-      }
-    });
-    // Eliminar en orden inverso para no afectar posiciones
-    toDelete.reverse().forEach(({ from, to }) => tr.delete(from, to));
-    editor.view.dispatch(tr);
+    if (originalContent) {
+      editor.commands.setContent(originalContent);
+    } else {
+      const { doc } = editor.state;
+      const tr = editor.state.tr;
+      const toDelete: { from: number; to: number }[] = [];
+      doc.descendants((node, pos) => {
+        if (node.isText && node.marks.some((m) => m.type.name === "aiSuggestion")) {
+          toDelete.push({ from: pos, to: pos + node.nodeSize });
+        }
+      });
+      toDelete.reverse().forEach(({ from, to }) => tr.delete(from, to));
+      editor.view.dispatch(tr);
+    }
+    setOriginalContent("");
     setHasPendingSuggestion(false);
   }
 
@@ -285,14 +269,8 @@ export default function Editor({ projectId }: { projectId: string }) {
         <div className="w-56 flex-shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
           <div className="p-3 border-b border-zinc-800">
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={newChapterTitle}
-                onChange={(e) => setNewChapterTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && createChapter()}
-                placeholder="Nuevo capítulo..."
-                className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-              />
+              <input type="text" value={newChapterTitle} onChange={(e) => setNewChapterTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createChapter()} placeholder="Nuevo capítulo..."
+                className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500" />
               <button onClick={createChapter} disabled={!newChapterTitle.trim()} className="bg-zinc-700 hover:bg-zinc-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:opacity-40">+</button>
             </div>
           </div>
@@ -308,8 +286,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                       <input autoFocus defaultValue={chapter.title}
                         onBlur={(e) => renameChapter(chapter.id, e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") renameChapter(chapter.id, e.currentTarget.value); if (e.key === "Escape") setEditingChapter(null); }}
-                        className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
-                      />
+                        className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white focus:outline-none" />
                     ) : (
                       <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">{chapter.title}</span>
                     )}
@@ -327,8 +304,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                             onClick={(e) => e.stopPropagation()}
                             onBlur={(e) => renameScene(scene.id, chapter.id, e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter") renameScene(scene.id, chapter.id, e.currentTarget.value); if (e.key === "Escape") setEditingScene(null); }}
-                            className="flex-1 bg-zinc-700 border border-zinc-500 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
-                          />
+                            className="flex-1 bg-zinc-700 border border-zinc-500 rounded px-1 py-0.5 text-xs text-white focus:outline-none" />
                         ) : (
                           <span onDoubleClick={(e) => { e.stopPropagation(); setEditingScene(scene.id); }} className="text-xs truncate">{scene.title}</span>
                         )}
@@ -341,8 +317,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                         onChange={(e) => setNewSceneTitles((prev) => ({ ...prev, [chapter.id]: e.target.value }))}
                         onKeyDown={(e) => e.key === "Enter" && createScene(chapter.id)}
                         placeholder="Nueva escena..."
-                        className="flex-1 bg-transparent border-b border-zinc-800 focus:border-zinc-600 px-1 py-0.5 text-xs text-zinc-600 placeholder-zinc-700 focus:outline-none focus:text-zinc-400 transition-colors"
-                      />
+                        className="flex-1 bg-transparent border-b border-zinc-800 focus:border-zinc-600 px-1 py-0.5 text-xs text-zinc-600 placeholder-zinc-700 focus:outline-none focus:text-zinc-400 transition-colors" />
                       <button onClick={() => createScene(chapter.id)} disabled={!newSceneTitles[chapter.id]?.trim()} className="text-zinc-700 hover:text-zinc-400 text-xs disabled:opacity-30 transition-colors">+</button>
                     </div>
                   </div>
@@ -405,16 +380,10 @@ export default function Editor({ projectId }: { projectId: string }) {
                   <span className="text-xs text-red-400">Sugerencia de IA pendiente</span>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={acceptSuggestion}
-                    className="text-xs bg-green-900/50 hover:bg-green-800/50 text-green-400 px-3 py-1 rounded border border-green-800/50 transition-colors"
-                  >
+                  <button onClick={acceptSuggestion} className="text-xs bg-green-900/50 hover:bg-green-800/50 text-green-400 px-3 py-1 rounded border border-green-800/50 transition-colors">
                     ✓ Aceptar
                   </button>
-                  <button
-                    onClick={discardSuggestion}
-                    className="text-xs bg-red-900/50 hover:bg-red-800/50 text-red-400 px-3 py-1 rounded border border-red-800/50 transition-colors"
-                  >
+                  <button onClick={discardSuggestion} className="text-xs bg-red-900/50 hover:bg-red-800/50 text-red-400 px-3 py-1 rounded border border-red-800/50 transition-colors">
                     ✗ Descartar
                   </button>
                 </div>
@@ -436,27 +405,16 @@ export default function Editor({ projectId }: { projectId: string }) {
                     <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">✦ Asistente IA</h3>
                     <div className="flex flex-col gap-2 mb-3">
                       {aiActions.map((action) => (
-                        <button
-                          key={action.key}
-                          onClick={() => setAiAction(action.key)}
-                          className={`text-left px-3 py-2 rounded text-xs transition-colors ${aiAction === action.key ? "bg-zinc-700 text-white" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"}`}
-                        >
+                        <button key={action.key} onClick={() => setAiAction(action.key)}
+                          className={`text-left px-3 py-2 rounded text-xs transition-colors ${aiAction === action.key ? "bg-zinc-700 text-white" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"}`}>
                           {action.label}
                         </button>
                       ))}
                     </div>
-                    <input
-                      type="text"
-                      value={aiTone}
-                      onChange={(e) => setAiTone(e.target.value)}
-                      placeholder="Tono (ej: oscuro, poético...)"
-                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 mb-3"
-                    />
-                    <button
-                      onClick={runAI}
-                      disabled={aiLoading || hasPendingSuggestion}
-                      className="w-full bg-white text-zinc-900 py-2 rounded text-xs font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-50"
-                    >
+                    <input type="text" value={aiTone} onChange={(e) => setAiTone(e.target.value)} placeholder="Tono (ej: oscuro, poético...)"
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 mb-3" />
+                    <button onClick={runAI} disabled={aiLoading || hasPendingSuggestion}
+                      className="w-full bg-white text-zinc-900 py-2 rounded text-xs font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-50">
                       {aiLoading ? "Generando..." : hasPendingSuggestion ? "Resolvé la sugerencia primero" : "Generar"}
                     </button>
                   </div>
@@ -475,7 +433,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                     {hasPendingSuggestion && !aiLoading && (
                       <div className="bg-red-950/20 border border-red-900/30 rounded-lg p-3 mt-2">
                         <p className="text-red-400 text-xs leading-relaxed">
-                          El texto en rojo en el editor es la sugerencia de la IA. Podés editarlo antes de aceptarlo.
+                          El texto en rojo es la sugerencia. Podés editarlo antes de aceptarlo.
                         </p>
                       </div>
                     )}
