@@ -52,7 +52,7 @@ TONO Y ESTILO: ${tone || "No definido"}
 
   const actions: Record<string, string> = {
     continue: `Continuá la siguiente escena de forma natural, manteniendo el estilo, tono y coherencia con los personajes y el mundo definidos. Escribí entre 150 y 300 palabras. No agregues títulos ni explicaciones, solo el texto narrativo continuando desde donde termina.`,
-    improve: `Analizá el siguiente fragmento y sugerí mejoras concretas de ritmo, tensión, estilo o caracterización. Sé específico y constructivo.`,
+    improve: `Reescribí el siguiente texto aplicando TODAS las mejoras necesarias: corregí errores ortográficos y de puntuación, mejorá el ritmo narrativo, profundizá las descripciones, ajustá la caracterización para que sea coherente con los personajes definidos, reflejá la atmósfera del lugar, y mejorá la claridad de las frases confusas. Aplicá cada cambio directamente sobre el texto sin explicar nada. Devolvé únicamente el texto reescrito y mejorado, manteniendo la voz del autor.`,
     consistency: `Revisá el siguiente fragmento y detectá cualquier inconsistencia con los personajes, lugares o reglas del mundo definidos. Si todo está bien, decilo.`,
     alternative: `Reescribí la siguiente escena de una forma completamente diferente, manteniendo los mismos personajes y eventos pero cambiando el enfoque narrativo, el punto de vista o el tono.`,
     tension: `Reescribí o sugerí cómo reescribir el siguiente fragmento para aumentar la tensión y el ritmo sin cambiar los eventos principales.`,
