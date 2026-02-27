@@ -103,3 +103,13 @@ export const sceneVersions = pgTable("scene_versions", {
   content: text("content").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
 });
+
+export const userProfiles = pgTable("user_profiles", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  bio: text("bio").default(""),
+  website: text("website").default(""),
+  location: text("location").default(""),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
