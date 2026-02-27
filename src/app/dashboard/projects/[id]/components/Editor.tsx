@@ -22,7 +22,7 @@ const AISuggestion = Mark.create({
 });
 
 interface Chapter { id: string; title: string; order: number; }
-interface Scene { id: string; chapterId: string; title: string; content: string; order: number; }
+interface Scene { id: string; chapterId: string; title: string; content: string; synopsis: string; order: number; }
 
 const fonts = [
   { label: "Georgia", value: "Georgia, serif" },
@@ -67,6 +67,10 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [hasPendingSuggestion, setHasPendingSuggestion] = useState(false);
   const [originalContent, setOriginalContent] = useState<string>("");
+
+  // Sinopsis
+  const [synopsis, setSynopsis] = useState("");
+  const [synopsisTimer, setSynopsisTimer] = useState<NodeJS.Timeout | null>(null);
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
@@ -138,7 +142,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     if (!confirm("¿Eliminar esta escena?")) return;
     await fetch(`/api/scenes?id=${id}`, { method: "DELETE" });
     setScenes((prev) => ({ ...prev, [chapterId]: prev[chapterId].filter((s) => s.id !== id) }));
-    if (selectedScene?.id === id) { setSelectedScene(null); editor?.commands.setContent(""); }
+    if (selectedScene?.id === id) { setSelectedScene(null); editor?.commands.setContent(""); setSynopsis(""); }
   }
 
   async function renameChapter(id: string, title: string) {
@@ -157,6 +161,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     if (selectedScene?.id === scene.id) return;
     setSelectedScene(scene);
     editor?.commands.setContent(scene.content || "");
+    setSynopsis(scene.synopsis || "");
     setSaved(true);
     setHasPendingSuggestion(false);
     setOriginalContent("");
@@ -176,6 +181,27 @@ export default function Editor({ projectId }: { projectId: string }) {
     setSaving(false);
     setSaved(true);
   }, []);
+
+  function handleSynopsisChange(value: string) {
+    setSynopsis(value);
+    if (synopsisTimer) clearTimeout(synopsisTimer);
+    const timer = setTimeout(async () => {
+      if (selectedScene) {
+        await fetch("/api/scenes", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: selectedScene.id, synopsis: value }),
+        });
+        setScenes((prev) => ({
+          ...prev,
+          [selectedScene.chapterId]: prev[selectedScene.chapterId].map((s) =>
+            s.id === selectedScene.id ? { ...s, synopsis: value } : s
+          ),
+        }));
+      }
+    }, 1500);
+    setSynopsisTimer(timer);
+  }
 
   async function runAI() {
     if (!selectedScene || !editor) return;
@@ -197,27 +223,15 @@ export default function Editor({ projectId }: { projectId: string }) {
     if (data.text) {
       const aiText = data.text;
       const replaceActions = ["improve", "tension", "alternative"];
-
       if (replaceActions.includes(aiAction)) {
         editor.commands.setContent({
           type: "doc",
-          content: [{
-            type: "paragraph",
-            content: [{
-              type: "text",
-              marks: [{ type: "aiSuggestion" }],
-              text: aiText,
-            }],
-          }],
+          content: [{ type: "paragraph", content: [{ type: "text", marks: [{ type: "aiSuggestion" }], text: aiText }] }],
         });
       } else {
         editor.chain().focus().insertContentAt(editor.state.doc.content.size, {
           type: "paragraph",
-          content: [{
-            type: "text",
-            marks: [{ type: "aiSuggestion" }],
-            text: aiText,
-          }],
+          content: [{ type: "text", marks: [{ type: "aiSuggestion" }], text: aiText }],
         }).run();
       }
       setHasPendingSuggestion(true);
@@ -325,6 +339,20 @@ export default function Editor({ projectId }: { projectId: string }) {
               ))
             )}
           </div>
+
+          {/* Sinopsis de escena seleccionada */}
+          {selectedScene && (
+            <div className="border-t border-zinc-800 p-3 flex flex-col gap-1.5">
+              <p className="text-xs text-zinc-600 uppercase tracking-wider">Sinopsis</p>
+              <textarea
+                value={synopsis}
+                onChange={(e) => handleSynopsisChange(e.target.value)}
+                placeholder="Resumí esta escena..."
+                rows={4}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-400 placeholder-zinc-700 focus:outline-none focus:border-zinc-600 resize-none transition-colors"
+              />
+            </div>
+          )}
         </div>
       )}
 
