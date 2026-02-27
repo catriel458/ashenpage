@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -9,22 +9,25 @@ interface Profile {
   bio: string;
   website: string;
   location: string;
+  avatar: string;
 }
 
 interface User {
   name: string;
   email: string;
   image: string;
+  provider: string;
 }
 
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile>({ bio: "", website: "", location: "" });
+  const [profile, setProfile] = useState<Profile>({ bio: "", website: "", location: "", avatar: "" });
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -43,7 +46,25 @@ export default function ProfilePage() {
       bio: data.profile.bio || "",
       website: data.profile.website || "",
       location: data.profile.location || "",
+      avatar: data.profile.avatar || "",
     });
+  }
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Limitar a 1MB
+    if (file.size > 1024 * 1024) {
+      alert("La imagen debe ser menor a 1MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfile((prev) => ({ ...prev, avatar: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
   }
 
   async function saveProfile() {
@@ -57,6 +78,12 @@ export default function ProfilePage() {
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  function getAvatar() {
+    if (profile.avatar) return profile.avatar;
+    if (user?.image) return user.image;
+    return null;
   }
 
   if (!user) {
@@ -83,19 +110,40 @@ export default function ProfilePage() {
 
       <main className="max-w-2xl mx-auto px-8 py-10 flex flex-col gap-8">
 
-        {/* Avatar y datos básicos */}
+        {/* Avatar */}
         <div className="flex items-center gap-6">
-          {user.image ? (
-            <img src={user.image} alt={user.name} className="w-16 h-16 rounded-full border border-zinc-700" />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xl text-zinc-400">
-              {name.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <div className="relative group">
+            {getAvatar() ? (
+              <img
+                src={getAvatar()!}
+                alt={name}
+                className="w-20 h-20 rounded-full border border-zinc-700 object-cover"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-2xl text-zinc-400">
+                {name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs text-white"
+            >
+              Cambiar
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+          </div>
           <div>
             <p className="text-white font-medium">{name}</p>
             <p className="text-zinc-500 text-sm">{user.email}</p>
-            <p className="text-zinc-700 text-xs mt-1">Cuenta Google</p>
+            <p className="text-zinc-700 text-xs mt-1">
+              {user.provider === "credentials" ? "Cuenta propia" : "Cuenta Google"}
+            </p>
           </div>
         </div>
 
@@ -144,6 +192,13 @@ export default function ProfilePage() {
             />
           </div>
 
+          {user.provider === "credentials" && (
+            <div className="border-t border-zinc-800 pt-5 flex flex-col gap-3">
+              <p className="text-xs text-zinc-600 uppercase tracking-wider">Cambiar contraseña</p>
+              <ChangePassword />
+            </div>
+          )}
+
           <button
             onClick={saveProfile}
             disabled={saving}
@@ -153,7 +208,7 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* Estadísticas */}
+        {/* Cuenta */}
         <div className="border-t border-zinc-800 pt-6">
           <p className="text-xs text-zinc-600 uppercase tracking-wider mb-4">Tu cuenta</p>
           <div className="flex flex-col gap-3">
@@ -163,7 +218,7 @@ export default function ProfilePage() {
             </div>
             <div className="flex items-center justify-between py-2 border-b border-zinc-900">
               <span className="text-sm text-zinc-400">Proveedor</span>
-              <span className="text-sm text-zinc-500">Google</span>
+              <span className="text-sm text-zinc-500">{user.provider === "credentials" ? "Cuenta propia" : "Google"}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-zinc-900">
               <span className="text-sm text-zinc-400">Plan</span>
@@ -183,6 +238,75 @@ export default function ProfilePage() {
         </div>
 
       </main>
+    </div>
+  );
+}
+
+function ChangePassword() {
+  const [form, setForm] = useState({ current: "", next: "", confirm: "" });
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleChange() {
+    setError("");
+    setMessage("");
+    if (form.next !== form.confirm) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
+    if (form.next.length < 6) {
+      setError("La nueva contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    setLoading(true);
+    const res = await fetch("/api/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword: form.current, newPassword: form.next }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+    } else {
+      setMessage("Contraseña actualizada");
+      setForm({ current: "", next: "", confirm: "" });
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input
+        type="password"
+        value={form.current}
+        onChange={(e) => setForm({ ...form, current: e.target.value })}
+        placeholder="Contraseña actual"
+        className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-zinc-600 transition-colors"
+      />
+      <input
+        type="password"
+        value={form.next}
+        onChange={(e) => setForm({ ...form, next: e.target.value })}
+        placeholder="Nueva contraseña"
+        className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-zinc-600 transition-colors"
+      />
+      <input
+        type="password"
+        value={form.confirm}
+        onChange={(e) => setForm({ ...form, confirm: e.target.value })}
+        placeholder="Confirmar nueva contraseña"
+        className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-700 focus:outline-none focus:border-zinc-600 transition-colors"
+      />
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {message && <p className="text-green-400 text-xs">{message}</p>}
+      <button
+        onClick={handleChange}
+        disabled={loading || !form.current || !form.next || !form.confirm}
+        className="border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
+      >
+        {loading ? "Actualizando..." : "Actualizar contraseña"}
+      </button>
     </div>
   );
 }

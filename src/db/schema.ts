@@ -112,6 +112,7 @@ export const userProfiles = pgTable("user_profiles", {
   bio: text("bio").default(""),
   website: text("website").default(""),
   location: text("location").default(""),
+  avatar: text("avatar").default(""),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });

@@ -14,7 +14,6 @@ export async function GET() {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   let [profile] = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId));
 
-  // Crear perfil si no existe
   if (!profile) {
     const [newProfile] = await db
       .insert(userProfiles)
@@ -32,20 +31,24 @@ export async function PUT(req: Request) {
 
   const userId = session.user.id;
   const body = await req.json();
-  const { name, bio, website, location } = body;
+  const { name, bio, website, location, avatar } = body;
 
-  // Actualizar nombre en users
   if (name !== undefined) {
     await db.update(users).set({ name }).where(eq(users.id, userId));
   }
 
-  // Actualizar o crear perfil
   const [existing] = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId));
 
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (bio !== undefined) updateData.bio = bio;
+  if (website !== undefined) updateData.website = website;
+  if (location !== undefined) updateData.location = location;
+  if (avatar !== undefined) updateData.avatar = avatar;
+
   if (existing) {
-    await db.update(userProfiles).set({ bio, website, location, updatedAt: new Date() }).where(eq(userProfiles.userId, userId));
+    await db.update(userProfiles).set(updateData).where(eq(userProfiles.userId, userId));
   } else {
-    await db.insert(userProfiles).values({ id: nanoid(), userId, bio, website, location });
+    await db.insert(userProfiles).values({ id: nanoid(), userId, bio, website, location, avatar });
   }
 
   return NextResponse.json({ success: true });
