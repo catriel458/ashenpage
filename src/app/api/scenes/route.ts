@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   const newScene = await db
     .insert(scenes)
-    .values({ id: nanoid(), chapterId, title, content: "", order: order ?? 0 })
+    .values({ id: nanoid(), chapterId, title, content: "", synopsis: "", order: order ?? 0 })
     .returning();
 
   return NextResponse.json(newScene[0], { status: 201 });
@@ -43,12 +43,17 @@ export async function PUT(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const body = await req.json();
-  const { id, title, content } = body;
+  const { id, title, content, synopsis } = body;
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() };
+  if (title !== undefined) updateData.title = title;
+  if (content !== undefined) updateData.content = content;
+  if (synopsis !== undefined) updateData.synopsis = synopsis;
 
   const updated = await db
     .update(scenes)
-    .set({ title, content, updatedAt: new Date() })
+    .set(updateData)
     .where(eq(scenes.id, id))
     .returning();
 

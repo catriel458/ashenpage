@@ -8,6 +8,7 @@ import Places from "./components/Places";
 import WorldRules from "./components/WorldRules";
 import Editor from "./components/Editor";
 import ExportModal from "./components/ExportModal";
+import Board from "./components/Board";
 
 interface Project {
   id: string;
@@ -46,7 +47,7 @@ export default function ProjectPage() {
     );
   }
 
-  const tabs = ["personajes", "lugares", "reglas del mundo", "editor"];
+  const tabs = ["personajes", "lugares", "reglas del mundo", "editor", "tablero"];
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -97,6 +98,7 @@ export default function ProjectPage() {
         {activeTab === "lugares" && <Places projectId={params.id as string} />}
         {activeTab === "reglas del mundo" && <WorldRules projectId={params.id as string} />}
         {activeTab === "editor" && <Editor projectId={params.id as string} />}
+        {activeTab === "tablero" && <Board projectId={params.id as string} />}
       </main>
 
       {showExport && (

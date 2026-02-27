@@ -90,7 +90,9 @@ export const scenes = pgTable("scenes", {
   chapterId: text("chapterId").notNull().references(() => chapters.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   content: text("content").default(""),
+  synopsis: text("synopsis").default(""),
   order: integer("order").notNull().default(0),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
+
