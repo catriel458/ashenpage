@@ -91,8 +91,8 @@ export const scenes = pgTable("scenes", {
   title: text("title").notNull(),
   content: text("content").default(""),
   synopsis: text("synopsis").default(""),
+  status: text("status").default("borrador"),
   order: integer("order").notNull().default(0),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
-
