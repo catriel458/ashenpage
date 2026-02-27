@@ -23,6 +23,7 @@ const AISuggestion = Mark.create({
 
 interface Chapter { id: string; title: string; order: number; }
 interface Scene { id: string; chapterId: string; title: string; content: string; synopsis: string; order: number; }
+interface Version { id: string; sceneId: string; content: string; createdAt: string; }
 
 const fonts = [
   { label: "Georgia", value: "Georgia, serif" },
@@ -47,6 +48,15 @@ function ToolbarButton({ onClick, active, children }: { onClick: () => void; act
   );
 }
 
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").trim();
+}
+
 export default function Editor({ projectId }: { projectId: string }) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [scenes, setScenes] = useState<Record<string, Scene[]>>({});
@@ -69,6 +79,12 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [originalContent, setOriginalContent] = useState<string>("");
   const [synopsis, setSynopsis] = useState("");
   const [synopsisTimer, setSynopsisTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // Historial
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [versions, setVersions] = useState<Version[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<Version | null>(null);
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
@@ -163,6 +179,9 @@ export default function Editor({ projectId }: { projectId: string }) {
     setSaved(true);
     setHasPendingSuggestion(false);
     setOriginalContent("");
+    setHistoryOpen(false);
+    setVersions([]);
+    setPreviewVersion(null);
   }
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
@@ -171,6 +190,12 @@ export default function Editor({ projectId }: { projectId: string }) {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: scene.id, content: html }),
+    });
+    // Guardar versión
+    await fetch("/api/versions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sceneId: scene.id, content: html }),
     });
     setScenes((prev) => ({
       ...prev,
@@ -199,6 +224,25 @@ export default function Editor({ projectId }: { projectId: string }) {
       }
     }, 1500);
     setSynopsisTimer(timer);
+  }
+
+  async function openHistory() {
+    if (!selectedScene) return;
+    setHistoryOpen(true);
+    setAiOpen(false);
+    setLoadingVersions(true);
+    const res = await fetch(`/api/versions?sceneId=${selectedScene.id}`);
+    const data = await res.json();
+    setVersions(data);
+    setLoadingVersions(false);
+  }
+
+  function restoreVersion(version: Version) {
+    if (!confirm("¿Restaurar esta versión? El contenido actual se guardará como una nueva versión.")) return;
+    editor?.commands.setContent(version.content);
+    if (selectedScene) saveContent(selectedScene, version.content);
+    setPreviewVersion(null);
+    setHistoryOpen(false);
   }
 
   async function runAI() {
@@ -311,9 +355,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                         <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">
                           {chapter.title}
                         </span>
-                        <span className="text-xs text-zinc-700">
-                          {chapterWordCount(chapter.id)} palabras
-                        </span>
+                        <span className="text-xs text-zinc-700">{chapterWordCount(chapter.id)} palabras</span>
                       </div>
                     )}
                     <button onClick={() => deleteChapter(chapter.id)} className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
@@ -398,7 +440,13 @@ export default function Editor({ projectId }: { projectId: string }) {
                   {saving ? "Guardando..." : saved ? "✓ Guardado" : "Sin guardar"}
                 </span>
                 <button
-                  onClick={() => setAiOpen(!aiOpen)}
+                  onClick={openHistory}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${historyOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
+                >
+                  ↺ Historial
+                </button>
+                <button
+                  onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setPreviewVersion(null); }}
                   className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
                 >
                   ✦ IA
@@ -420,12 +468,8 @@ export default function Editor({ projectId }: { projectId: string }) {
                   <span className="text-xs text-red-400">Sugerencia de IA pendiente</span>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={acceptSuggestion} className="text-xs bg-green-900/50 hover:bg-green-800/50 text-green-400 px-3 py-1 rounded border border-green-800/50 transition-colors">
-                    ✓ Aceptar
-                  </button>
-                  <button onClick={discardSuggestion} className="text-xs bg-red-900/50 hover:bg-red-800/50 text-red-400 px-3 py-1 rounded border border-red-800/50 transition-colors">
-                    ✗ Descartar
-                  </button>
+                  <button onClick={acceptSuggestion} className="text-xs bg-green-900/50 hover:bg-green-800/50 text-green-400 px-3 py-1 rounded border border-green-800/50 transition-colors">✓ Aceptar</button>
+                  <button onClick={discardSuggestion} className="text-xs bg-red-900/50 hover:bg-red-800/50 text-red-400 px-3 py-1 rounded border border-red-800/50 transition-colors">✗ Descartar</button>
                 </div>
               </div>
             )}
@@ -437,6 +481,57 @@ export default function Editor({ projectId }: { projectId: string }) {
                   <EditorContent editor={editor} />
                 </div>
               </div>
+
+              {/* Panel historial */}
+              {historyOpen && (
+                <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">↺ Historial</h3>
+                    <button onClick={() => { setHistoryOpen(false); setPreviewVersion(null); }} className="text-zinc-600 hover:text-white text-sm transition-colors">×</button>
+                  </div>
+
+                  {previewVersion ? (
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                      <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+                        <span className="text-xs text-zinc-500">{formatDate(previewVersion.createdAt)}</span>
+                        <div className="flex gap-2">
+                          <button onClick={() => restoreVersion(previewVersion)} className="text-xs bg-white text-zinc-900 px-2 py-1 rounded font-medium hover:bg-zinc-200 transition-colors">Restaurar</button>
+                          <button onClick={() => setPreviewVersion(null)} className="text-xs text-zinc-600 hover:text-white transition-colors">← Volver</button>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-4">
+                        <p className="text-zinc-400 text-xs leading-relaxed whitespace-pre-wrap">{stripHtml(previewVersion.content)}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto">
+                      {loadingVersions ? (
+                        <div className="flex items-center justify-center h-24">
+                          <p className="text-zinc-600 text-xs">Cargando...</p>
+                        </div>
+                      ) : versions.length === 0 ? (
+                        <p className="text-zinc-700 text-xs text-center mt-8 px-4">No hay versiones guardadas todavía</p>
+                      ) : (
+                        versions.map((version, index) => (
+                          <div
+                            key={version.id}
+                            onClick={() => setPreviewVersion(version)}
+                            className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 hover:bg-zinc-900 cursor-pointer group transition-colors"
+                          >
+                            <div>
+                              <p className="text-xs text-zinc-400">{formatDate(version.createdAt)}</p>
+                              <p className="text-xs text-zinc-700 mt-0.5">
+                                {index === 0 ? "Versión actual" : `Versión ${versions.length - index}`} · {stripHtml(version.content).split(/\s+/).filter(Boolean).length} palabras
+                              </p>
+                            </div>
+                            <span className="text-zinc-700 group-hover:text-zinc-400 text-xs transition-colors">Ver →</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Panel IA */}
               {aiOpen && (
@@ -458,12 +553,9 @@ export default function Editor({ projectId }: { projectId: string }) {
                       {aiLoading ? "Generando..." : hasPendingSuggestion ? "Resolvé la sugerencia primero" : "Generar"}
                     </button>
                   </div>
-
                   <div className="flex-1 p-4">
                     {!hasPendingSuggestion && !aiLoading && (
-                      <p className="text-zinc-700 text-xs text-center mt-4">
-                        El texto generado aparecerá en rojo directamente en el editor
-                      </p>
+                      <p className="text-zinc-700 text-xs text-center mt-4">El texto generado aparecerá en rojo directamente en el editor</p>
                     )}
                     {aiLoading && (
                       <div className="flex items-center justify-center h-24">
@@ -472,9 +564,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                     )}
                     {hasPendingSuggestion && !aiLoading && (
                       <div className="bg-red-950/20 border border-red-900/30 rounded-lg p-3 mt-2">
-                        <p className="text-red-400 text-xs leading-relaxed">
-                          El texto en rojo es la sugerencia. Podés editarlo antes de aceptarlo.
-                        </p>
+                        <p className="text-red-400 text-xs leading-relaxed">El texto en rojo es la sugerencia. Podés editarlo antes de aceptarlo.</p>
                       </div>
                     )}
                   </div>

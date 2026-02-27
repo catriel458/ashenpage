@@ -96,3 +96,10 @@ export const scenes = pgTable("scenes", {
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
+
+export const sceneVersions = pgTable("scene_versions", {
+  id: text("id").primaryKey(),
+  sceneId: text("sceneId").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
