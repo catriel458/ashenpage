@@ -67,8 +67,6 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [hasPendingSuggestion, setHasPendingSuggestion] = useState(false);
   const [originalContent, setOriginalContent] = useState<string>("");
-
-  // Sinopsis
   const [synopsis, setSynopsis] = useState("");
   const [synopsisTimer, setSynopsisTimer] = useState<NodeJS.Timeout | null>(null);
 
@@ -273,6 +271,13 @@ export default function Editor({ projectId }: { projectId: string }) {
     setHasPendingSuggestion(false);
   }
 
+  function chapterWordCount(chapterId: string): number {
+    return (scenes[chapterId] || []).reduce((acc, s) => {
+      const text = s.content?.replace(/<[^>]*>/g, "").trim() || "";
+      return acc + (text === "" ? 0 : text.split(/\s+/).length);
+    }, 0);
+  }
+
   const wordCount = editor?.getText().trim() === "" ? 0 : editor?.getText().trim().split(/\s+/).length ?? 0;
 
   return (
@@ -302,7 +307,14 @@ export default function Editor({ projectId }: { projectId: string }) {
                         onKeyDown={(e) => { if (e.key === "Enter") renameChapter(chapter.id, e.currentTarget.value); if (e.key === "Escape") setEditingChapter(null); }}
                         className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white focus:outline-none" />
                     ) : (
-                      <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">{chapter.title}</span>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span onDoubleClick={() => setEditingChapter(chapter.id)} className="text-xs font-semibold text-zinc-400 uppercase tracking-wider truncate cursor-default">
+                          {chapter.title}
+                        </span>
+                        <span className="text-xs text-zinc-700">
+                          {chapterWordCount(chapter.id)} palabras
+                        </span>
+                      </div>
                     )}
                     <button onClick={() => deleteChapter(chapter.id)} className="text-zinc-700 hover:text-red-400 text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
                   </div>
@@ -340,7 +352,7 @@ export default function Editor({ projectId }: { projectId: string }) {
             )}
           </div>
 
-          {/* Sinopsis de escena seleccionada */}
+          {/* Sinopsis */}
           {selectedScene && (
             <div className="border-t border-zinc-800 p-3 flex flex-col gap-1.5">
               <p className="text-xs text-zinc-600 uppercase tracking-wider">Sinopsis</p>
