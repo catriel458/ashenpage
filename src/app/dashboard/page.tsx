@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 interface Project {
@@ -73,12 +73,21 @@ export default function DashboardPage() {
             Ashen<span className="text-zinc-400">page</span>
           </h1>
           <div className="flex items-center gap-4">
-            <span className="text-zinc-500 text-sm">{session?.user?.email}</span>
+            <span className="text-zinc-500 text-sm hidden md:block">{session?.user?.email}</span>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="text-sm text-zinc-500 hover:text-white transition-colors"
+              onClick={() => router.push("/dashboard/profile")}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              Cerrar sesión
+              {session?.user?.image ? (
+                <img src={session.user.image} alt="perfil" className="w-7 h-7 rounded-full border border-zinc-700" />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs text-zinc-400">
+                  {session?.user?.name?.charAt(0).toUpperCase() || "?"}
+                </div>
+              )}
+              <span className="text-sm text-zinc-400 hover:text-white transition-colors hidden md:block">
+                {session?.user?.name}
+              </span>
             </button>
           </div>
         </div>
