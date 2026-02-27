@@ -7,6 +7,7 @@ import Characters from "./components/Characters";
 import Places from "./components/Places";
 import WorldRules from "./components/WorldRules";
 import Editor from "./components/Editor";
+import ExportModal from "./components/ExportModal";
 
 interface Project {
   id: string;
@@ -21,6 +22,7 @@ export default function ProjectPage() {
   const params = useParams();
   const [project, setProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState("personajes");
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -63,6 +65,12 @@ export default function ProjectPage() {
               {project.genre}
             </span>
           </div>
+          <button
+            onClick={() => setShowExport(true)}
+            className="text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Exportar
+          </button>
         </div>
       </header>
 
@@ -90,6 +98,13 @@ export default function ProjectPage() {
         {activeTab === "reglas del mundo" && <WorldRules projectId={params.id as string} />}
         {activeTab === "editor" && <Editor projectId={params.id as string} />}
       </main>
+
+      {showExport && (
+        <ExportModal
+          projectId={params.id as string}
+          onClose={() => setShowExport(false)}
+        />
+      )}
     </div>
   );
 }
