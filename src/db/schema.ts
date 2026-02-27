@@ -11,6 +11,7 @@ export const users = pgTable("users", {
 });
 
 export const accounts = pgTable("accounts", {
+  id: text("id").primaryKey(),
   userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   provider: text("provider").notNull(),
