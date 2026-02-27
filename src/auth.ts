@@ -1,19 +1,26 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, accounts, sessions, verificationTokens } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { nanoid } from "nanoid";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: DrizzleAdapter(db),
   trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      async profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
     }),
     Credentials({
       name: "credentials",
@@ -42,13 +49,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           name: user.name,
           email: user.email,
-          image: null, // No guardar imagen en token
+          image: null,
         };
       },
     }),
   ],
   session: { strategy: "jwt" },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google") {
+        // Buscar o crear usuario para Google
+        const [existing] = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, user.email!));
+
+        if (!existing) {
+          const userId = nanoid();
+          await db.insert(users).values({
+            id: userId,
+            name: user.name,
+            email: user.email!,
+            image: user.image,
+            provider: "google",
+          });
+          user.id = userId;
+        } else {
+          user.id = existing.id;
+          // Actualizar imagen de Google si cambió
+          if (user.image && existing.image !== user.image) {
+            await db.update(users).set({ image: user.image }).where(eq(users.id, existing.id));
+          }
+        }
+      }
+      return true;
+    },
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
