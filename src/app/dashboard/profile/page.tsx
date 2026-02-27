@@ -53,13 +53,10 @@ export default function ProfilePage() {
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Limitar a 1MB
     if (file.size > 1024 * 1024) {
       alert("La imagen debe ser menor a 1MB");
       return;
     }
-
     const reader = new FileReader();
     reader.onloadend = () => {
       setProfile((prev) => ({ ...prev, avatar: reader.result as string }));
@@ -74,7 +71,7 @@ export default function ProfilePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, ...profile }),
     });
-    await update({ name });
+    await update({ name, image: profile.avatar || user?.image || null });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
