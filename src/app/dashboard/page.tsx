@@ -20,13 +20,17 @@ export default function DashboardPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", genre: "Horror" });
   const [creating, setCreating] = useState(false);
+  const [avatar, setAvatar] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
   useEffect(() => {
-    if (status === "authenticated") fetchProjects();
+    if (status === "authenticated") {
+      fetchProjects();
+      fetchAvatar();
+    }
   }, [status]);
 
   async function fetchProjects() {
@@ -35,6 +39,20 @@ export default function DashboardPage() {
     setProjects(data);
     setLoading(false);
   }
+
+  async function fetchAvatar() {
+    const res = await fetch("/api/profile");
+    const data = await res.json();
+    setAvatar(data.profile?.avatar || data.user?.image || null);
+  }
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (status === "authenticated") fetchAvatar();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [status]);
 
   async function createProject() {
     if (!form.title) return;
@@ -56,6 +74,10 @@ export default function DashboardPage() {
     fetchProjects();
   }
 
+  function getInitial() {
+    return session?.user?.name?.charAt(0).toUpperCase() || "?";
+  }
+
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -66,7 +88,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
-      {/* Header */}
       <header className="border-b border-zinc-800 px-8 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold">
@@ -78,11 +99,11 @@ export default function DashboardPage() {
               onClick={() => router.push("/dashboard/profile")}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              {session?.user?.image ? (
-                <img src={session.user.image} alt="perfil" className="w-7 h-7 rounded-full border border-zinc-700" />
+              {avatar ? (
+                <img src={avatar} alt="perfil" className="w-7 h-7 rounded-full border border-zinc-700 object-cover" />
               ) : (
                 <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs text-zinc-400">
-                  {session?.user?.name?.charAt(0).toUpperCase() || "?"}
+                  {getInitial()}
                 </div>
               )}
               <span className="text-sm text-zinc-400 hover:text-white transition-colors hidden md:block">
@@ -93,7 +114,6 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main */}
       <main className="max-w-5xl mx-auto px-8 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -110,7 +130,6 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Projects grid */}
         {projects.length === 0 ? (
           <div className="border border-dashed border-zinc-800 rounded-xl p-16 flex flex-col items-center justify-center gap-3">
             <p className="text-zinc-600 text-sm">Tu primera historia te está esperando</p>
@@ -155,12 +174,10 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* Modal nuevo proyecto */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-md flex flex-col gap-4">
             <h3 className="text-lg font-semibold">Nuevo proyecto</h3>
-
             <div className="flex flex-col gap-1">
               <label className="text-zinc-400 text-sm">Título *</label>
               <input
@@ -171,7 +188,6 @@ export default function DashboardPage() {
                 className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zinc-500"
               />
             </div>
-
             <div className="flex flex-col gap-1">
               <label className="text-zinc-400 text-sm">Descripción</label>
               <textarea
@@ -182,7 +198,6 @@ export default function DashboardPage() {
                 className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-zinc-500 resize-none"
               />
             </div>
-
             <div className="flex flex-col gap-1">
               <label className="text-zinc-400 text-sm">Género *</label>
               <select
@@ -198,7 +213,6 @@ export default function DashboardPage() {
                 <option value="Otro">Otro</option>
               </select>
             </div>
-
             <div className="flex gap-3 mt-2">
               <button
                 onClick={() => setShowModal(false)}
