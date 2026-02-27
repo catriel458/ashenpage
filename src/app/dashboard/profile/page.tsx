@@ -64,18 +64,18 @@ export default function ProfilePage() {
     reader.readAsDataURL(file);
   }
 
-  async function saveProfile() {
-    setSaving(true);
-    await fetch("/api/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, ...profile }),
-    });
-    await update({ name, image: profile.avatar || user?.image || null });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
+    async function saveProfile() {
+      setSaving(true);
+      await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ...profile }),
+      });
+      await update({ name });
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
 
   function getAvatar() {
     if (profile.avatar) return profile.avatar;
