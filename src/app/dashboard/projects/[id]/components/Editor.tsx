@@ -21,9 +21,27 @@ const AISuggestion = Mark.create({
   },
 });
 
+const CommentMark = Mark.create({
+  name: "commentMark",
+  addAttributes() {
+    return { commentId: { default: null } };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-comment-id]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", mergeAttributes(HTMLAttributes, {
+      "data-comment-id": HTMLAttributes.commentId,
+      class: "comment-highlight",
+      style: "background-color: rgba(234, 179, 8, 0.2); border-bottom: 1px solid rgba(234, 179, 8, 0.6); cursor: pointer;"
+    }), 0];
+  },
+});
+
 interface Chapter { id: string; title: string; order: number; }
 interface Scene { id: string; chapterId: string; title: string; content: string; synopsis: string; order: number; }
 interface Version { id: string; sceneId: string; content: string; createdAt: string; }
+interface Comment { id: string; sceneId: string; text: string; anchor: string; createdAt: string; }
 
 const fonts = [
   { label: "Georgia", value: "Georgia, serif" },
@@ -70,7 +88,6 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [font, setFont] = useState(fonts[0].value);
   const [fontSize, setFontSize] = useState("18");
   const [focusMode, setFocusMode] = useState(false);
-  const [saveTimer, setSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiAction, setAiAction] = useState("continue");
   const [aiTone, setAiTone] = useState("");
@@ -91,13 +108,22 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [matchCount, setMatchCount] = useState(0);
   const [caseSensitive, setCaseSensitive] = useState(false);
 
+  // Comentarios
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [newCommentText, setNewCommentText] = useState("");
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  const [addingComment, setAddingComment] = useState(false);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
+
   const selectedSceneRef = useRef<Scene | null>(null);
   const saveContentRef = useRef<((scene: Scene, html: string) => Promise<void>) | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
+    extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion, CommentMark],
     content: "",
     editorProps: {
       attributes: { class: "prose prose-invert max-w-none focus:outline-none min-h-screen" },
@@ -110,8 +136,17 @@ export default function Editor({ projectId }: { projectId: string }) {
           saveContentRef.current(selectedSceneRef.current, editor.getHTML());
         }
       }, 1500);
-      // Actualizar conteo de matches si búsqueda activa
       if (searchTerm) updateMatchCount(editor.getText(), searchTerm, caseSensitive);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      if (from !== to) {
+        const selectedText = editor.state.doc.textBetween(from, to);
+        if (selectedText.trim()) setPendingAnchor(selectedText.trim().slice(0, 100));
+        else setPendingAnchor(null);
+      } else {
+        setPendingAnchor(null);
+      }
     },
   });
 
@@ -171,6 +206,67 @@ export default function Editor({ projectId }: { projectId: string }) {
       saveContentRef.current(selectedSceneRef.current, newHtml);
     }
     setMatchCount(0);
+  }
+
+  async function fetchComments(sceneId: string) {
+    const res = await fetch(`/api/comments?sceneId=${sceneId}`);
+    const data = await res.json();
+    setComments(data);
+  }
+
+  async function addComment() {
+    if (!selectedScene || !newCommentText.trim() || !pendingAnchor) return;
+    setAddingComment(true);
+    const res = await fetch("/api/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sceneId: selectedScene.id, text: newCommentText.trim(), anchor: pendingAnchor }),
+    });
+    const comment = await res.json();
+
+    // Marcar el texto en el editor
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      if (from !== to) {
+        editor.chain().focus().setMark("commentMark", { commentId: comment.id }).run();
+        const html = editor.getHTML();
+        if (selectedSceneRef.current && saveContentRef.current) {
+          saveContentRef.current(selectedSceneRef.current, html);
+        }
+      }
+    }
+
+    setComments((prev) => [...prev, comment]);
+    setNewCommentText("");
+    setPendingAnchor(null);
+    setAddingComment(false);
+  }
+
+  async function deleteComment(id: string) {
+    await fetch(`/api/comments?id=${id}`, { method: "DELETE" });
+
+    // Sacar el mark del editor
+    if (editor) {
+      const { doc } = editor.state;
+      const tr = editor.state.tr;
+      doc.descendants((node, pos) => {
+        if (node.isText) {
+          node.marks.forEach((mark) => {
+            if (mark.type.name === "commentMark" && mark.attrs.commentId === id) {
+              tr.removeMark(pos, pos + node.nodeSize, editor.schema.marks.commentMark);
+            }
+          });
+        }
+      });
+      editor.view.dispatch(tr);
+      const html = editor.getHTML();
+      if (selectedSceneRef.current && saveContentRef.current) {
+        saveContentRef.current(selectedSceneRef.current, html);
+      }
+    }
+
+    setComments((prev) => prev.filter((c) => c.id !== id));
+    if (selectedCommentId === id) setSelectedCommentId(null);
   }
 
   useEffect(() => { fetchChapters(); }, [projectId]);
@@ -261,6 +357,9 @@ export default function Editor({ projectId }: { projectId: string }) {
     setSearchTerm("");
     setReplaceTerm("");
     setMatchCount(0);
+    setComments([]);
+    setSelectedCommentId(null);
+    fetchComments(scene.id);
   }
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
@@ -310,6 +409,7 @@ export default function Editor({ projectId }: { projectId: string }) {
     if (!selectedScene) return;
     setHistoryOpen(true);
     setAiOpen(false);
+    setCommentsOpen(false);
     setLoadingVersions(true);
     const res = await fetch(`/api/versions?sceneId=${selectedScene.id}`);
     const data = await res.json();
@@ -515,7 +615,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                   {saving ? "Guardando..." : saved ? "✓ Guardado" : "Sin guardar"}
                 </span>
                 <button
-                  onClick={() => { setSearchOpen(!searchOpen); setHistoryOpen(false); setAiOpen(false); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+                  onClick={() => { setSearchOpen(!searchOpen); setHistoryOpen(false); setAiOpen(false); setCommentsOpen(false); setTimeout(() => searchInputRef.current?.focus(), 50); }}
                   className={`text-xs px-3 py-1 rounded border transition-colors ${searchOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
                 >
                   ⌕ Buscar
@@ -527,7 +627,13 @@ export default function Editor({ projectId }: { projectId: string }) {
                   ↺ Historial
                 </button>
                 <button
-                  onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setSearchOpen(false); setPreviewVersion(null); }}
+                  onClick={() => { setCommentsOpen(!commentsOpen); setAiOpen(false); setHistoryOpen(false); setSearchOpen(false); }}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${commentsOpen ? "bg-yellow-700 border-yellow-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
+                >
+                  ✎ Notas {comments.length > 0 && <span className="ml-1 bg-yellow-600 text-white rounded-full px-1">{comments.length}</span>}
+                </button>
+                <button
+                  onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setSearchOpen(false); setCommentsOpen(false); setPreviewVersion(null); }}
                   className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
                 >
                   ✦ IA
@@ -579,24 +685,16 @@ export default function Editor({ projectId }: { projectId: string }) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={replaceNext}
-                    disabled={!searchTerm || matchCount === 0}
-                    className="text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white px-2 py-1 rounded transition-colors disabled:opacity-30"
-                  >
+                  <button onClick={replaceNext} disabled={!searchTerm || matchCount === 0}
+                    className="text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white px-2 py-1 rounded transition-colors disabled:opacity-30">
                     Reemplazar
                   </button>
-                  <button
-                    onClick={replaceAll}
-                    disabled={!searchTerm || matchCount === 0}
-                    className="text-xs bg-white text-zinc-900 hover:bg-zinc-200 px-2 py-1 rounded transition-colors disabled:opacity-30"
-                  >
+                  <button onClick={replaceAll} disabled={!searchTerm || matchCount === 0}
+                    className="text-xs bg-white text-zinc-900 hover:bg-zinc-200 px-2 py-1 rounded transition-colors disabled:opacity-30">
                     Reemplazar todo
                   </button>
-                  <button
-                    onClick={() => { setSearchOpen(false); setSearchTerm(""); setReplaceTerm(""); setMatchCount(0); }}
-                    className="text-zinc-600 hover:text-white text-sm transition-colors ml-1"
-                  >
+                  <button onClick={() => { setSearchOpen(false); setSearchTerm(""); setReplaceTerm(""); setMatchCount(0); }}
+                    className="text-zinc-600 hover:text-white text-sm transition-colors ml-1">
                     ×
                   </button>
                 </div>
@@ -617,12 +715,82 @@ export default function Editor({ projectId }: { projectId: string }) {
               </div>
             )}
 
+            {/* Banner agregar comentario */}
+            {commentsOpen && pendingAnchor && (
+              <div className="flex items-start gap-3 px-4 py-3 bg-yellow-950/20 border-b border-yellow-900/30">
+                <div className="flex-1 flex flex-col gap-2">
+                  <p className="text-xs text-yellow-600">Texto seleccionado: <span className="text-yellow-400 italic">"{pendingAnchor.slice(0, 60)}{pendingAnchor.length > 60 ? "..." : ""}"</span></p>
+                  <div className="flex gap-2">
+                    <textarea
+                      ref={commentInputRef}
+                      value={newCommentText}
+                      onChange={(e) => setNewCommentText(e.target.value)}
+                      placeholder="Escribí tu nota..."
+                      rows={2}
+                      className="flex-1 bg-zinc-900 border border-yellow-900/50 rounded px-2 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-700 resize-none"
+                    />
+                    <button
+                      onClick={addComment}
+                      disabled={addingComment || !newCommentText.trim()}
+                      className="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 self-end"
+                    >
+                      {addingComment ? "..." : "Agregar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-1 overflow-hidden">
               <div className="flex-1 overflow-y-auto px-16 py-10" style={{ fontFamily: font, fontSize: `${fontSize}px` }}>
                 <div className="max-w-2xl mx-auto">
                   <EditorContent editor={editor} />
                 </div>
               </div>
+
+              {/* Panel comentarios */}
+              {commentsOpen && (
+                <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
+                  <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-yellow-600 uppercase tracking-wider">✎ Notas</h3>
+                    <button onClick={() => setCommentsOpen(false)} className="text-zinc-600 hover:text-white text-sm transition-colors">×</button>
+                  </div>
+                  {!commentsOpen ? null : comments.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center gap-2 px-4">
+                      <p className="text-zinc-700 text-xs text-center">Seleccioná texto en el editor y escribí una nota</p>
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto">
+                      {comments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          onClick={() => setSelectedCommentId(selectedCommentId === comment.id ? null : comment.id)}
+                          className={`px-4 py-3 border-b border-zinc-900 cursor-pointer transition-colors group ${selectedCommentId === comment.id ? "bg-yellow-950/20 border-l-2 border-l-yellow-600" : "hover:bg-zinc-900"}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-yellow-700 italic truncate mb-1">"{comment.anchor}"</p>
+                              <p className="text-xs text-zinc-300 leading-relaxed">{comment.text}</p>
+                              <p className="text-xs text-zinc-700 mt-1">{formatDate(comment.createdAt)}</p>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteComment(comment.id); }}
+                              className="text-zinc-700 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {comments.length === 0 && (
+                    <div className="p-4 border-t border-zinc-800">
+                      <p className="text-zinc-700 text-xs text-center">Seleccioná texto y escribí una nota para anclarla</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Panel historial */}
               {historyOpen && (

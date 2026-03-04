@@ -117,3 +117,11 @@ export const userProfiles = pgTable("user_profiles", {
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
+
+export const sceneComments = pgTable("scene_comments", {
+  id: text("id").primaryKey(),
+  sceneId: text("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  anchor: text("anchor").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
