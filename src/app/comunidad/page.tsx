@@ -14,6 +14,7 @@ interface Publication {
   authorImage: string | null;
   avgRating: number | null;
   ratingCount: number;
+  coverImage: string | null;
 }
 
 function StarDisplay({ rating, count }: { rating: number | null; count: number }) {
@@ -130,35 +131,52 @@ export default function ComunidadPage() {
               <div
                 key={pub.id}
                 onClick={() => router.push(`/comunidad/${pub.id}`)}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col gap-3 hover:border-zinc-600 transition-colors cursor-pointer group"
+                className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col hover:border-zinc-600 transition-colors cursor-pointer group"
               >
-                <div className="flex items-start justify-between">
-                  <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-1 rounded-full">
-                    {pub.genre}
-                  </span>
-                  <span className="text-xs text-zinc-700">
-                    {new Date(pub.publishedAt).toLocaleDateString("es-AR")}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white group-hover:text-zinc-200 transition-colors">
-                    {pub.title}
-                  </h3>
-                  {pub.description && (
-                    <p className="text-zinc-500 text-sm mt-1 line-clamp-2">{pub.description}</p>
+                {/* Portada */}
+                <div className="h-36 bg-zinc-800 overflow-hidden">
+                  {pub.coverImage ? (
+                    <img
+                      src={pub.coverImage}
+                      alt="portada"
+                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-zinc-700 text-xs">Sin portada</span>
+                    </div>
                   )}
                 </div>
-                <div className="mt-auto flex flex-col gap-2">
-                  <StarDisplay rating={pub.avgRating} count={pub.ratingCount} />
-                  <div className="flex items-center gap-2">
-                    {pub.authorImage ? (
-                      <img src={pub.authorImage} alt="" className="w-5 h-5 rounded-full object-cover" />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-400">
-                        {pub.authorName?.charAt(0).toUpperCase()}
-                      </div>
+
+                <div className="p-5 flex flex-col gap-3 flex-1">
+                  <div className="flex items-start justify-between">
+                    <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-1 rounded-full">
+                      {pub.genre}
+                    </span>
+                    <span className="text-xs text-zinc-700">
+                      {new Date(pub.publishedAt).toLocaleDateString("es-AR")}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white group-hover:text-zinc-200 transition-colors">
+                      {pub.title}
+                    </h3>
+                    {pub.description && (
+                      <p className="text-zinc-500 text-sm mt-1 line-clamp-2">{pub.description}</p>
                     )}
-                    <span className="text-xs text-zinc-500">{pub.authorName}</span>
+                  </div>
+                  <div className="mt-auto flex flex-col gap-2">
+                    <StarDisplay rating={pub.avgRating} count={pub.ratingCount} />
+                    <div className="flex items-center gap-2">
+                      {pub.authorImage ? (
+                        <img src={pub.authorImage} alt="" className="w-5 h-5 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-400">
+                          {pub.authorName?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-xs text-zinc-500">{pub.authorName}</span>
+                    </div>
                   </div>
                 </div>
               </div>

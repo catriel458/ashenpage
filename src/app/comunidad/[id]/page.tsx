@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -29,6 +29,8 @@ interface Publication {
   avgRating: number | null;
   ratingCount: number;
   chapters: Chapter[];
+  coverImage: string | null;
+  userId: string;
 }
 
 interface Comment {
@@ -52,9 +54,7 @@ function StarRating({ value, onChange, readonly }: { value: number; onChange?: (
           onMouseLeave={() => !readonly && setHover(0)}
           disabled={readonly}
           className={`text-xl transition-colors ${
-            s <= (hover || value)
-              ? "text-yellow-400"
-              : "text-zinc-700"
+            s <= (hover || value) ? "text-yellow-400" : "text-zinc-700"
           } ${!readonly ? "hover:scale-110 transition-transform cursor-pointer" : "cursor-default"}`}
         >
           ★
@@ -78,6 +78,8 @@ export default function PublicationPage() {
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchPublication();
@@ -125,6 +127,25 @@ export default function PublicationPage() {
     fetchPublication();
   }
 
+  async function uploadCover(file: File) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert("La imagen no puede superar 5MB"); return; }
+    setUploadingCover(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (data.url) {
+      await fetch("/api/publications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, coverImage: data.url }),
+      });
+      setPublication((prev) => prev ? { ...prev, coverImage: data.url } : prev);
+    }
+    setUploadingCover(false);
+  }
+
   async function postComment() {
     if (!session?.user) { router.push("/login"); return; }
     if (!newComment.trim()) return;
@@ -150,6 +171,8 @@ export default function PublicationPage() {
       day: "2-digit", month: "short", year: "numeric"
     });
   }
+
+  const isAuthor = session?.user?.id === publication?.userId;
 
   if (loading) {
     return (
@@ -181,6 +204,38 @@ export default function PublicationPage() {
         </div>
       </header>
 
+      {/* Portada hero */}
+      <div className="relative w-full h-64 bg-zinc-900 overflow-hidden">
+        {publication.coverImage ? (
+          <img src={publication.coverImage} alt="portada" className="w-full h-full object-cover opacity-60" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <p className="text-zinc-800 text-sm">Sin portada</p>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+
+        {/* Botón subir portada — solo para el autor */}
+        {isAuthor && (
+          <div className="absolute bottom-4 right-4">
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && uploadCover(e.target.files[0])}
+            />
+            <button
+              onClick={() => coverInputRef.current?.click()}
+              disabled={uploadingCover}
+              className="text-xs bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors backdrop-blur-sm"
+            >
+              {uploadingCover ? "Subiendo..." : publication.coverImage ? "✎ Cambiar portada" : "＋ Agregar portada"}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="max-w-6xl mx-auto px-8 py-10 flex gap-8">
 
         {/* Sidebar — índice */}
@@ -203,9 +258,7 @@ export default function PublicationPage() {
                           key={scene.id}
                           onClick={() => setSelectedScene(scene)}
                           className={`text-xs py-0.5 text-left transition-colors ${
-                            selectedScene?.id === scene.id
-                              ? "text-white"
-                              : "text-zinc-600 hover:text-zinc-400"
+                            selectedScene?.id === scene.id ? "text-white" : "text-zinc-600 hover:text-zinc-400"
                           }`}
                         >
                           {scene.title}
@@ -263,9 +316,7 @@ export default function PublicationPage() {
                   </p>
                   <div className="flex items-center gap-2">
                     <StarRating value={userRating} onChange={submitRating} />
-                    {ratingSubmitted && (
-                      <span className="text-xs text-zinc-600">✓ Guardado</span>
-                    )}
+                    {ratingSubmitted && <span className="text-xs text-zinc-600">✓ Guardado</span>}
                   </div>
                 </div>
               )}
@@ -287,7 +338,6 @@ export default function PublicationPage() {
                 style={{ fontFamily: "Georgia, serif", fontSize: "18px", lineHeight: "1.9" }}
                 dangerouslySetInnerHTML={{ __html: selectedScene.content || "<p class='text-zinc-700'>Esta escena no tiene contenido.</p>" }}
               />
-              {/* Navegación entre escenas */}
               <div className="flex justify-between mt-10 pt-6 border-t border-zinc-900">
                 {(() => {
                   const allScenes = publication.chapters.flatMap(c => c.scenes);
@@ -322,7 +372,6 @@ export default function PublicationPage() {
             <h2 className="text-lg font-semibold mb-6">
               Comentarios <span className="text-zinc-600 text-sm font-normal">({comments.length})</span>
             </h2>
-
             {session?.user ? (
               <div className="flex gap-3 mb-8">
                 <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-xs text-zinc-400 flex-shrink-0 mt-1">
@@ -352,7 +401,6 @@ export default function PublicationPage() {
                 </p>
               </div>
             )}
-
             <div className="flex flex-col gap-4">
               {comments.length === 0 ? (
                 <p className="text-zinc-700 text-sm text-center py-8">Todavía no hay comentarios</p>

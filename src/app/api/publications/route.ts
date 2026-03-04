@@ -138,3 +138,23 @@ export async function DELETE(req: Request) {
   await db.delete(publications).where(eq(publications.id, id));
   return NextResponse.json({ success: true });
 }
+
+export async function PUT(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { id, coverImage } = await req.json();
+  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+
+  const [pub] = await db.select().from(publications).where(eq(publications.id, id));
+  if (!pub || pub.userId !== session.user.id)
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+
+  const [updated] = await db
+    .update(publications)
+    .set({ coverImage, updatedAt: new Date() })
+    .where(eq(publications.id, id))
+    .returning();
+
+  return NextResponse.json(updated);
+}
