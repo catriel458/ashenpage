@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import CoverCropper from "@/components/CoverCropper";
 
 interface Chapter {
   id: string;
@@ -78,8 +79,8 @@ export default function PublicationPage() {
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
-  const coverInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchPublication();
@@ -90,7 +91,6 @@ export default function PublicationPage() {
   async function fetchPublication() {
     const res = await fetch(`/api/publications?id=${id}`);
     const data = await res.json();
-    console.log("publication data:", data); // agregá esto
     setPublication(data);
     if (data.chapters?.length > 0) {
       setSelectedChapter(data.chapters[0].id);
@@ -129,8 +129,7 @@ export default function PublicationPage() {
   }
 
   async function uploadCover(file: File) {
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { alert("La imagen no puede superar 5MB"); return; }
+    setShowCropper(false);
     setUploadingCover(true);
     const formData = new FormData();
     formData.append("file", file);
@@ -216,18 +215,10 @@ export default function PublicationPage() {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
 
-        {/* Botón subir portada — solo para el autor */}
         {isAuthor && (
           <div className="absolute bottom-4 right-4">
-            <input
-              ref={coverInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && uploadCover(e.target.files[0])}
-            />
             <button
-              onClick={() => coverInputRef.current?.click()}
+              onClick={() => setShowCropper(true)}
               disabled={uploadingCover}
               className="text-xs bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors backdrop-blur-sm"
             >
@@ -437,6 +428,13 @@ export default function PublicationPage() {
           </div>
         </main>
       </div>
+
+      {showCropper && (
+        <CoverCropper
+          onUpload={uploadCover}
+          onCancel={() => setShowCropper(false)}
+        />
+      )}
     </div>
   );
 }
