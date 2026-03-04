@@ -135,6 +135,7 @@ export const publications = pgTable("publications", {
   genre: text("genre").notNull(),
   publishedAt: timestamp("published_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+  coverImage: text("cover_image").default(""),
 });
 
 export const ratings = pgTable("ratings", {
