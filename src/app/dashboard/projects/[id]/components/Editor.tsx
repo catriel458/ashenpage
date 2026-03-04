@@ -172,6 +172,11 @@ export default function Editor({ projectId }: { projectId: string }) {
   }
 
 function selectScene(scene: Scene) {
+  // Cancelar cualquier guardado pendiente
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    setSaveTimer(null);
+  }
   setSelectedScene(scene);
   editor?.commands.setContent(scene.content || "");
   setSynopsis(scene.synopsis || "");
