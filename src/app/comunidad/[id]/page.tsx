@@ -90,6 +90,7 @@ export default function PublicationPage() {
   async function fetchPublication() {
     const res = await fetch(`/api/publications?id=${id}`);
     const data = await res.json();
+    console.log("publication data:", data); // agregá esto
     setPublication(data);
     if (data.chapters?.length > 0) {
       setSelectedChapter(data.chapters[0].id);
