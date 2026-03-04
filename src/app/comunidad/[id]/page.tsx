@@ -207,7 +207,7 @@ export default function PublicationPage() {
       {/* Portada hero */}
       <div className="relative w-full h-64 bg-zinc-900 overflow-hidden">
         {publication.coverImage ? (
-          <img src={publication.coverImage} alt="portada" className="w-full h-full object-cover opacity-60" />
+          <img src={publication.coverImage} alt="portada" className="w-full h-full object-contain opacity-80" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <p className="text-zinc-800 text-sm">Sin portada</p>
