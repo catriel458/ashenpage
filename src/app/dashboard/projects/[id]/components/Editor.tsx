@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -79,12 +79,14 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [originalContent, setOriginalContent] = useState<string>("");
   const [synopsis, setSynopsis] = useState("");
   const [synopsisTimer, setSynopsisTimer] = useState<NodeJS.Timeout | null>(null);
-
-  // Historial
   const [historyOpen, setHistoryOpen] = useState(false);
   const [versions, setVersions] = useState<Version[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<Version | null>(null);
+
+  const selectedSceneRef = useRef<Scene | null>(null);
+  const saveContentRef = useRef<((scene: Scene, html: string) => Promise<void>) | null>(null);
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
@@ -94,11 +96,12 @@ export default function Editor({ projectId }: { projectId: string }) {
     },
     onUpdate: ({ editor }) => {
       setSaved(false);
-      if (saveTimer) clearTimeout(saveTimer);
-      const timer = setTimeout(() => {
-        if (selectedScene) saveContent(selectedScene, editor.getHTML());
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        if (selectedSceneRef.current && saveContentRef.current) {
+          saveContentRef.current(selectedSceneRef.current, editor.getHTML());
+        }
       }, 1500);
-      setSaveTimer(timer);
     },
   });
 
@@ -171,22 +174,22 @@ export default function Editor({ projectId }: { projectId: string }) {
     setEditingScene(null);
   }
 
-function selectScene(scene: Scene) {
-  // Cancelar cualquier guardado pendiente
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    setSaveTimer(null);
+  function selectScene(scene: Scene) {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    selectedSceneRef.current = scene;
+    setSelectedScene(scene);
+    editor?.commands.setContent(scene.content || "");
+    setSynopsis(scene.synopsis || "");
+    setSaved(true);
+    setHasPendingSuggestion(false);
+    setOriginalContent("");
+    setHistoryOpen(false);
+    setVersions([]);
+    setPreviewVersion(null);
   }
-  setSelectedScene(scene);
-  editor?.commands.setContent(scene.content || "");
-  setSynopsis(scene.synopsis || "");
-  setSaved(true);
-  setHasPendingSuggestion(false);
-  setOriginalContent("");
-  setHistoryOpen(false);
-  setVersions([]);
-  setPreviewVersion(null);
-}
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
     setSaving(true);
@@ -195,7 +198,6 @@ function selectScene(scene: Scene) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: scene.id, content: html }),
     });
-    // Guardar versión
     await fetch("/api/versions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -208,6 +210,9 @@ function selectScene(scene: Scene) {
     setSaving(false);
     setSaved(true);
   }, []);
+
+  // Mantener la ref siempre actualizada
+  saveContentRef.current = saveContent;
 
   function handleSynopsisChange(value: string) {
     setSynopsis(value);
@@ -257,14 +262,12 @@ function selectScene(scene: Scene) {
     }
     setAiLoading(true);
     setOriginalContent(editor.getHTML());
-
     const context = editor.getText();
     const res = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId, action: aiAction, context, tone: aiTone }),
     });
-
     const data = await res.json();
     if (data.text) {
       const aiText = data.text;
@@ -331,7 +334,6 @@ function selectScene(scene: Scene) {
   return (
     <div className={`flex h-[calc(100vh-120px)] ${focusMode ? "fixed inset-0 z-50 bg-zinc-950" : ""}`}>
 
-      {/* Sidebar */}
       {!focusMode && (
         <div className="w-56 flex-shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
           <div className="p-3 border-b border-zinc-800">
@@ -398,7 +400,6 @@ function selectScene(scene: Scene) {
             )}
           </div>
 
-          {/* Sinopsis */}
           {selectedScene && (
             <div className="border-t border-zinc-800 p-3 flex flex-col gap-1.5">
               <p className="text-xs text-zinc-600 uppercase tracking-wider">Sinopsis</p>
@@ -414,7 +415,6 @@ function selectScene(scene: Scene) {
         </div>
       )}
 
-      {/* Editor */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {!selectedScene ? (
           <div className="flex-1 flex items-center justify-center">
@@ -422,7 +422,6 @@ function selectScene(scene: Scene) {
           </div>
         ) : (
           <>
-            {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 flex-wrap gap-2">
               <div className="flex items-center gap-1 flex-wrap">
                 <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")}><strong>N</strong></ToolbarButton>
@@ -443,28 +442,18 @@ function selectScene(scene: Scene) {
                 <span className={`text-xs ${saving ? "text-zinc-500" : saved ? "text-zinc-700" : "text-zinc-500"}`}>
                   {saving ? "Guardando..." : saved ? "✓ Guardado" : "Sin guardar"}
                 </span>
-                <button
-                  onClick={openHistory}
-                  className={`text-xs px-3 py-1 rounded border transition-colors ${historyOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
-                >
+                <button onClick={openHistory} className={`text-xs px-3 py-1 rounded border transition-colors ${historyOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}>
                   ↺ Historial
                 </button>
-                <button
-                  onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setPreviewVersion(null); }}
-                  className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
-                >
+                <button onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setPreviewVersion(null); }} className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}>
                   ✦ IA
                 </button>
-                <button
-                  onClick={() => setFocusMode(!focusMode)}
-                  className="text-xs text-zinc-600 hover:text-white transition-colors border border-zinc-800 hover:border-zinc-600 px-2 py-0.5 rounded"
-                >
+                <button onClick={() => setFocusMode(!focusMode)} className="text-xs text-zinc-600 hover:text-white transition-colors border border-zinc-800 hover:border-zinc-600 px-2 py-0.5 rounded">
                   {focusMode ? "Salir del foco" : "Modo foco"}
                 </button>
               </div>
             </div>
 
-            {/* Banner sugerencia pendiente */}
             {hasPendingSuggestion && (
               <div className="flex items-center justify-between px-4 py-2 bg-red-950/40 border-b border-red-900/50">
                 <div className="flex items-center gap-2">
@@ -479,21 +468,18 @@ function selectScene(scene: Scene) {
             )}
 
             <div className="flex flex-1 overflow-hidden">
-              {/* Texto */}
               <div className="flex-1 overflow-y-auto px-16 py-10" style={{ fontFamily: font, fontSize: `${fontSize}px` }}>
                 <div className="max-w-2xl mx-auto">
                   <EditorContent editor={editor} />
                 </div>
               </div>
 
-              {/* Panel historial */}
               {historyOpen && (
                 <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
                     <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">↺ Historial</h3>
                     <button onClick={() => { setHistoryOpen(false); setPreviewVersion(null); }} className="text-zinc-600 hover:text-white text-sm transition-colors">×</button>
                   </div>
-
                   {previewVersion ? (
                     <div className="flex flex-col flex-1 overflow-hidden">
                       <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
@@ -517,11 +503,8 @@ function selectScene(scene: Scene) {
                         <p className="text-zinc-700 text-xs text-center mt-8 px-4">No hay versiones guardadas todavía</p>
                       ) : (
                         versions.map((version, index) => (
-                          <div
-                            key={version.id}
-                            onClick={() => setPreviewVersion(version)}
-                            className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 hover:bg-zinc-900 cursor-pointer group transition-colors"
-                          >
+                          <div key={version.id} onClick={() => setPreviewVersion(version)}
+                            className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 hover:bg-zinc-900 cursor-pointer group transition-colors">
                             <div>
                               <p className="text-xs text-zinc-400">{formatDate(version.createdAt)}</p>
                               <p className="text-xs text-zinc-700 mt-0.5">
@@ -537,7 +520,6 @@ function selectScene(scene: Scene) {
                 </div>
               )}
 
-              {/* Panel IA */}
               {aiOpen && (
                 <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-zinc-800">
