@@ -175,6 +175,14 @@ export default function DashboardPage() {
                   >
                     Eliminar
                   </button>
+
+                              <button
+                  onClick={() => router.push("/comunidad")}
+                  className="text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Comunidad
+                </button>
+
                 </div>
                 <div>
                   <h3 className="font-semibold text-zinc-900 dark:text-white">{project.title}</h3>
