@@ -125,3 +125,30 @@ export const sceneComments = pgTable("scene_comments", {
   anchor: text("anchor").notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
+
+export const publications = pgTable("publications", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  genre: text("genre").notNull(),
+  publishedAt: timestamp("published_at", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const ratings = pgTable("ratings", {
+  id: text("id").primaryKey(),
+  publicationId: text("publication_id").notNull().references(() => publications.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stars: integer("stars").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const publicationComments = pgTable("publication_comments", {
+  id: text("id").primaryKey(),
+  publicationId: text("publication_id").notNull().references(() => publications.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
