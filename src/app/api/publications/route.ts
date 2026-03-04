@@ -10,9 +10,8 @@ export async function GET(req: Request) {
   const id = searchParams.get("id");
   const projectId = searchParams.get("projectId");
 
-  // Obtener una publicación específica con detalle
   if (id) {
-    const [pub] = await db
+    const result = await db
       .select({
         id: publications.id,
         title: publications.title,
@@ -21,6 +20,7 @@ export async function GET(req: Request) {
         publishedAt: publications.publishedAt,
         projectId: publications.projectId,
         userId: publications.userId,
+        coverImage: publications.coverImage,
         authorName: users.name,
         authorImage: users.image,
       })
@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       .innerJoin(users, eq(publications.userId, users.id))
       .where(eq(publications.id, id));
 
+    const pub = result[0];
     if (!pub) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
     const [ratingData] = await db
@@ -52,14 +53,22 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({
-      ...pub,
+      id: pub.id,
+      title: pub.title,
+      description: pub.description,
+      genre: pub.genre,
+      publishedAt: pub.publishedAt,
+      projectId: pub.projectId,
+      userId: pub.userId,
+      coverImage: pub.coverImage,
+      authorName: pub.authorName,
+      authorImage: pub.authorImage,
       avgRating: ratingData?.avg ? parseFloat(Number(ratingData.avg).toFixed(1)) : null,
       ratingCount: ratingData?.count || 0,
       chapters: chaptersWithScenes,
     });
   }
 
-  // Verificar si un proyecto ya está publicado
   if (projectId) {
     const [pub] = await db
       .select()
@@ -68,7 +77,6 @@ export async function GET(req: Request) {
     return NextResponse.json(pub || null);
   }
 
-  // Feed completo
   const allPubs = await db
     .select({
       id: publications.id,
@@ -77,6 +85,7 @@ export async function GET(req: Request) {
       genre: publications.genre,
       publishedAt: publications.publishedAt,
       userId: publications.userId,
+      coverImage: publications.coverImage,
       authorName: users.name,
       authorImage: users.image,
     })
@@ -108,7 +117,6 @@ export async function POST(req: Request) {
   const { projectId, title, description, genre } = await req.json();
   if (!projectId || !title || !genre) return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
 
-  // Verificar que no esté ya publicado
   const [existing] = await db
     .select()
     .from(publications)
@@ -152,7 +160,7 @@ export async function PUT(req: Request) {
 
   const [updated] = await db
     .update(publications)
-    .set({ coverImage, updatedAt: new Date() })
+    .set({ coverImage: coverImage, updatedAt: new Date() })
     .where(eq(publications.id, id))
     .returning();
 
