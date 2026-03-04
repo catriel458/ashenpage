@@ -204,29 +204,42 @@ export default function PublicationPage() {
         </div>
       </header>
 
-      {/* Portada hero */}
-      <div className="relative w-full h-64 bg-zinc-900 overflow-hidden">
-        {publication.coverImage ? (
-          <img src={publication.coverImage} alt="portada" className="w-full h-full object-contain opacity-80" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <p className="text-zinc-800 text-sm">Sin portada</p>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+   {/* Portada hero */}
+<div className="relative w-full h-64 bg-zinc-900 overflow-hidden">
+  {publication.coverImage ? (
+    <>
+      {/* Fondo difuminado */}
+      <img
+        src={publication.coverImage}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover scale-110 opacity-40 blur-xl"
+      />
+      {/* Imagen principal centrada */}
+      <img
+        src={publication.coverImage}
+        alt="portada"
+        className="absolute inset-0 w-full h-full object-contain opacity-90 z-10"
+      />
+    </>
+  ) : (
+    <div className="w-full h-full flex items-center justify-center">
+      <p className="text-zinc-800 text-sm">Sin portada</p>
+    </div>
+  )}
+  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent z-20" />
 
-        {isAuthor && (
-          <div className="absolute bottom-4 right-4">
-            <button
-              onClick={() => setShowCropper(true)}
-              disabled={uploadingCover}
-              className="text-xs bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors backdrop-blur-sm"
-            >
-              {uploadingCover ? "Subiendo..." : publication.coverImage ? "✎ Cambiar portada" : "＋ Agregar portada"}
-            </button>
-          </div>
-        )}
-      </div>
+  {isAuthor && (
+    <div className="absolute bottom-4 right-4 z-30">
+      <button
+        onClick={() => setShowCropper(true)}
+        disabled={uploadingCover}
+        className="text-xs bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors backdrop-blur-sm"
+      >
+        {uploadingCover ? "Subiendo..." : publication.coverImage ? "✎ Cambiar portada" : "＋ Agregar portada"}
+      </button>
+    </div>
+  )}
+</div>
 
       <div className="max-w-6xl mx-auto px-8 py-10 flex gap-8">
 
