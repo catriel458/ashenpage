@@ -52,3 +52,25 @@ body {
   background-color: rgba(239, 68, 68, 0.08);
   border-radius: 2px;
 }
+
+/* Tema claro */
+.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f4f4f5;
+  --bg-tertiary: #e4e4e7;
+  --border: #d4d4d8;
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #a1a1aa;
+}
+
+/* Tema oscuro (ya es el default con zinc) */
+.dark {
+  --bg-primary: #09090b;
+  --bg-secondary: #18181b;
+  --bg-tertiary: #27272a;
+  --border: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+}
