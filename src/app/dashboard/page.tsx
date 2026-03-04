@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 dark:bg-zinc-950 flex items-center justify-center">
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <p className="text-zinc-500">Cargando...</p>
       </div>
     );
@@ -98,20 +98,21 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold">
             Ashen<span className="text-zinc-400">page</span>
           </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/comunidad")}
+              className="text-xs text-zinc-400 hover:text-white transition-colors font-medium px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-zinc-600 dark:hover:border-zinc-600"
+            >
+              ✦ Comunidad
+            </button>
             <span className="text-zinc-500 text-sm hidden md:block">{session?.user?.email}</span>
-
-            {/* Toggle tema */}
-            {mounted && (
-              <button
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm"
-                title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
-              >
-                {theme === "dark" ? "☀️" : "🌙"}
-              </button>
-            )}
-
+            <button
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm"
+              suppressHydrationWarning
+            >
+              {mounted ? (theme === "dark" ? "☀️" : "🌙") : "☀️"}
+            </button>
             <button
               onClick={() => router.push("/dashboard/profile")}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
@@ -175,14 +176,6 @@ export default function DashboardPage() {
                   >
                     Eliminar
                   </button>
-
-                              <button
-                  onClick={() => router.push("/comunidad")}
-                  className="text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  Comunidad
-                </button>
-
                 </div>
                 <div>
                   <h3 className="font-semibold text-zinc-900 dark:text-white">{project.title}</h3>
