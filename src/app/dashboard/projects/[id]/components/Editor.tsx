@@ -84,9 +84,17 @@ export default function Editor({ projectId }: { projectId: string }) {
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<Version | null>(null);
 
+  // Buscar y reemplazar
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [replaceTerm, setReplaceTerm] = useState("");
+  const [matchCount, setMatchCount] = useState(0);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+
   const selectedSceneRef = useRef<Scene | null>(null);
   const saveContentRef = useRef<((scene: Scene, html: string) => Promise<void>) | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [StarterKit, Underline, Typography, TextStyle, AISuggestion],
@@ -102,8 +110,68 @@ export default function Editor({ projectId }: { projectId: string }) {
           saveContentRef.current(selectedSceneRef.current, editor.getHTML());
         }
       }, 1500);
+      // Actualizar conteo de matches si búsqueda activa
+      if (searchTerm) updateMatchCount(editor.getText(), searchTerm, caseSensitive);
     },
   });
+
+  // Atajos de teclado
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
+      if (e.key === "Escape" && searchOpen) {
+        setSearchOpen(false);
+        setSearchTerm("");
+        setReplaceTerm("");
+        setMatchCount(0);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [searchOpen]);
+
+  function updateMatchCount(text: string, term: string, sensitive: boolean) {
+    if (!term) { setMatchCount(0); return; }
+    const flags = sensitive ? "g" : "gi";
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const matches = text.match(new RegExp(escaped, flags));
+    setMatchCount(matches ? matches.length : 0);
+  }
+
+  function handleSearchChange(value: string) {
+    setSearchTerm(value);
+    if (editor) updateMatchCount(editor.getText(), value, caseSensitive);
+  }
+
+  function replaceNext() {
+    if (!editor || !searchTerm) return;
+    const html = editor.getHTML();
+    const flags = caseSensitive ? "" : "i";
+    const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const newHtml = html.replace(new RegExp(escaped, flags), replaceTerm);
+    editor.commands.setContent(newHtml);
+    if (selectedSceneRef.current && saveContentRef.current) {
+      saveContentRef.current(selectedSceneRef.current, newHtml);
+    }
+    updateMatchCount(editor.getText(), searchTerm, caseSensitive);
+  }
+
+  function replaceAll() {
+    if (!editor || !searchTerm) return;
+    const html = editor.getHTML();
+    const flags = caseSensitive ? "g" : "gi";
+    const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const newHtml = html.replace(new RegExp(escaped, flags), replaceTerm);
+    editor.commands.setContent(newHtml);
+    if (selectedSceneRef.current && saveContentRef.current) {
+      saveContentRef.current(selectedSceneRef.current, newHtml);
+    }
+    setMatchCount(0);
+  }
 
   useEffect(() => { fetchChapters(); }, [projectId]);
 
@@ -189,6 +257,10 @@ export default function Editor({ projectId }: { projectId: string }) {
     setHistoryOpen(false);
     setVersions([]);
     setPreviewVersion(null);
+    setSearchOpen(false);
+    setSearchTerm("");
+    setReplaceTerm("");
+    setMatchCount(0);
   }
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
@@ -211,7 +283,6 @@ export default function Editor({ projectId }: { projectId: string }) {
     setSaved(true);
   }, []);
 
-  // Mantener la ref siempre actualizada
   saveContentRef.current = saveContent;
 
   function handleSynopsisChange(value: string) {
@@ -422,6 +493,7 @@ export default function Editor({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <>
+            {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 flex-wrap gap-2">
               <div className="flex items-center gap-1 flex-wrap">
                 <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")}><strong>N</strong></ToolbarButton>
@@ -442,18 +514,96 @@ export default function Editor({ projectId }: { projectId: string }) {
                 <span className={`text-xs ${saving ? "text-zinc-500" : saved ? "text-zinc-700" : "text-zinc-500"}`}>
                   {saving ? "Guardando..." : saved ? "✓ Guardado" : "Sin guardar"}
                 </span>
-                <button onClick={openHistory} className={`text-xs px-3 py-1 rounded border transition-colors ${historyOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}>
+                <button
+                  onClick={() => { setSearchOpen(!searchOpen); setHistoryOpen(false); setAiOpen(false); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${searchOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
+                >
+                  ⌕ Buscar
+                </button>
+                <button
+                  onClick={openHistory}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${historyOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
+                >
                   ↺ Historial
                 </button>
-                <button onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setPreviewVersion(null); }} className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}>
+                <button
+                  onClick={() => { setAiOpen(!aiOpen); setHistoryOpen(false); setSearchOpen(false); setPreviewVersion(null); }}
+                  className={`text-xs px-3 py-1 rounded border transition-colors ${aiOpen ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white"}`}
+                >
                   ✦ IA
                 </button>
-                <button onClick={() => setFocusMode(!focusMode)} className="text-xs text-zinc-600 hover:text-white transition-colors border border-zinc-800 hover:border-zinc-600 px-2 py-0.5 rounded">
+                <button
+                  onClick={() => setFocusMode(!focusMode)}
+                  className="text-xs text-zinc-600 hover:text-white transition-colors border border-zinc-800 hover:border-zinc-600 px-2 py-0.5 rounded"
+                >
                   {focusMode ? "Salir del foco" : "Modo foco"}
                 </button>
               </div>
             </div>
 
+            {/* Banner buscar y reemplazar */}
+            {searchOpen && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-zinc-900 border-b border-zinc-800 flex-wrap">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    placeholder="Buscar..."
+                    className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-40"
+                  />
+                  <input
+                    type="text"
+                    value={replaceTerm}
+                    onChange={(e) => setReplaceTerm(e.target.value)}
+                    placeholder="Reemplazar con..."
+                    className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-40"
+                  />
+                  <label className="flex items-center gap-1 text-xs text-zinc-500 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={caseSensitive}
+                      onChange={(e) => {
+                        setCaseSensitive(e.target.checked);
+                        updateMatchCount(editor?.getText() || "", searchTerm, e.target.checked);
+                      }}
+                      className="accent-zinc-500"
+                    />
+                    Aa
+                  </label>
+                  {searchTerm && (
+                    <span className="text-xs text-zinc-600">
+                      {matchCount} {matchCount === 1 ? "resultado" : "resultados"}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={replaceNext}
+                    disabled={!searchTerm || matchCount === 0}
+                    className="text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white px-2 py-1 rounded transition-colors disabled:opacity-30"
+                  >
+                    Reemplazar
+                  </button>
+                  <button
+                    onClick={replaceAll}
+                    disabled={!searchTerm || matchCount === 0}
+                    className="text-xs bg-white text-zinc-900 hover:bg-zinc-200 px-2 py-1 rounded transition-colors disabled:opacity-30"
+                  >
+                    Reemplazar todo
+                  </button>
+                  <button
+                    onClick={() => { setSearchOpen(false); setSearchTerm(""); setReplaceTerm(""); setMatchCount(0); }}
+                    className="text-zinc-600 hover:text-white text-sm transition-colors ml-1"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Banner sugerencia pendiente */}
             {hasPendingSuggestion && (
               <div className="flex items-center justify-between px-4 py-2 bg-red-950/40 border-b border-red-900/50">
                 <div className="flex items-center gap-2">
@@ -474,6 +624,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                 </div>
               </div>
 
+              {/* Panel historial */}
               {historyOpen && (
                 <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
@@ -520,6 +671,7 @@ export default function Editor({ projectId }: { projectId: string }) {
                 </div>
               )}
 
+              {/* Panel IA */}
               {aiOpen && (
                 <div className="w-72 flex-shrink-0 border-l border-zinc-800 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-zinc-800">
