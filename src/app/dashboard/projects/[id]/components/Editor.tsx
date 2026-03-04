@@ -171,18 +171,17 @@ export default function Editor({ projectId }: { projectId: string }) {
     setEditingScene(null);
   }
 
-  function selectScene(scene: Scene) {
-    if (selectedScene?.id === scene.id) return;
-    setSelectedScene(scene);
-    editor?.commands.setContent(scene.content || "");
-    setSynopsis(scene.synopsis || "");
-    setSaved(true);
-    setHasPendingSuggestion(false);
-    setOriginalContent("");
-    setHistoryOpen(false);
-    setVersions([]);
-    setPreviewVersion(null);
-  }
+function selectScene(scene: Scene) {
+  setSelectedScene(scene);
+  editor?.commands.setContent(scene.content || "");
+  setSynopsis(scene.synopsis || "");
+  setSaved(true);
+  setHasPendingSuggestion(false);
+  setOriginalContent("");
+  setHistoryOpen(false);
+  setVersions([]);
+  setPreviewVersion(null);
+}
 
   const saveContent = useCallback(async (scene: Scene, html: string) => {
     setSaving(true);
